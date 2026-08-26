@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
@@ -16,6 +16,10 @@ export default function PremiumView() {
   const [quantity, setQuantity] = useState("20");
   const [prefix, setPrefix] = useState("QZ");
   const [notification, setNotification] = useState(null);
+
+  // Revoke All Modal
+  const [isRevokeAllOpen, setIsRevokeAllOpen] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
 
   const fetchCodes = async () => {
     setLoading(true);
@@ -72,6 +76,31 @@ export default function PremiumView() {
     }
   };
 
+  const handleConfirmRevokeAll = async () => {
+    setIsRevoking(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-grants/revoke-all`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to revoke all premium access");
+
+      setIsRevokeAllOpen(false);
+      setNotification({ type: "success", text: "Successfully revoked premium access for ALL users and cleared premium_access records." });
+      setTimeout(() => setNotification(null), 5000);
+      fetchCodes();
+    } catch (err) {
+      alert(`Error revoking premium: ${err.message}`);
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
   const exportCodesCsv = () => {
     if (codes.length === 0) return;
     let csv = "Code,Status,Used By,Created At\n";
@@ -97,11 +126,19 @@ export default function PremiumView() {
             Premium Codes & Monetization
           </h1>
           <p className="text-slate-400 text-xs mt-1">
-            Generate, export, and monitor premium redemption access codes for resellers and manual grants.
+            Generate, export, and monitor premium redemption access codes and manage app-wide user premium access.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIsRevokeAllOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+          >
+            <ShieldAlert className="w-4 h-4 text-red-400" />
+            Revoke Everyone's Premium
+          </button>
+
           <button
             onClick={exportCodesCsv}
             disabled={codes.length === 0}
@@ -123,7 +160,10 @@ export default function PremiumView() {
 
       {notification && (
         <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between">
-          <span>{notification.text}</span>
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400" />
+            <span>{notification.text}</span>
+          </div>
           <button onClick={() => setNotification(null)}><X className="w-4 h-4" /></button>
         </div>
       )}
@@ -211,7 +251,7 @@ export default function PremiumView() {
         </div>
       </div>
 
-      {/* Generator Modal */}
+      {/* Bulk Generator Modal */}
       {isGeneratorOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
@@ -264,6 +304,49 @@ export default function PremiumView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke All Premium Access Modal */}
+      {isRevokeAllOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-400 border-b border-slate-800 pb-3">
+              <AlertTriangle className="w-7 h-7 shrink-0 text-red-400" />
+              <h2 className="text-base font-bold text-white">Revoke Everyone's Premium</h2>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to <strong className="text-red-400">revoke premium access for ALL users</strong> app-wide?
+            </p>
+
+            <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300 space-y-1">
+              <div className="font-bold">What this action does:</div>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-300">
+                <li>Sets <code className="bg-slate-800 px-1 rounded text-red-300">is_premium = false</code> on all student profiles.</li>
+                <li>Deletes all rows from the <code className="bg-slate-800 px-1 rounded text-red-300">premium_access</code> table.</li>
+                <li>Records an audit log entry.</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                disabled={isRevoking}
+                onClick={() => setIsRevokeAllOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isRevoking}
+                onClick={handleConfirmRevokeAll}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/30 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {isRevoking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
+                Yes, Revoke All Premium
+              </button>
+            </div>
           </div>
         </div>
       )}
