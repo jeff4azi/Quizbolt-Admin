@@ -9,7 +9,12 @@ import CoursesView from "./components/CoursesView";
 import QuestionBank from "./components/QuestionBank";
 import PremiumView from "./components/PremiumView";
 import ReviewsView from "./components/ReviewsView";
+import ReferralsView from "./components/ReferralsView";
+import LeaderboardView from "./components/LeaderboardView";
+import AnalyticsView from "./components/AnalyticsView";
+import NotificationsView from "./components/NotificationsView";
 import ContentCmsView from "./components/ContentCmsView";
+import AdminUsersView from "./components/AdminUsersView";
 import AuditLogView from "./components/AuditLogView";
 import { RefreshCw } from "lucide-react";
 
@@ -76,7 +81,7 @@ export default function App() {
 
   if (loadingAuth) {
     return (
-      <div className="h-screen bg-slate-950 text-slate-400 flex flex-col items-center justify-center gap-3">
+      <div className="h-screen bg-slate-950 text-slate-400 flex flex-col items-center justify-center gap-3 font-sans">
         <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
         <span className="text-xs font-semibold">Initializing QuizBolt Admin...</span>
       </div>
@@ -116,7 +121,12 @@ export default function App() {
         {activeTab === "questions" && <QuestionBank initialCourseCode={selectedCourseCode} />}
         {activeTab === "premium" && <PremiumView />}
         {activeTab === "reviews" && <ReviewsView />}
+        {activeTab === "referrals" && <ReferralsView />}
+        {activeTab === "leaderboard" && <LeaderboardView />}
+        {activeTab === "analytics" && <AnalyticsView />}
+        {activeTab === "notifications" && <NotificationsView />}
         {activeTab === "cms" && <ContentCmsView />}
+        {activeTab === "admins" && <AdminUsersView />}
         {activeTab === "audit" && <AuditLogView />}
       </main>
     </div>
