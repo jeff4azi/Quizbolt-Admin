@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert, Copy, Filter, Sparkles, Clock } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
@@ -10,9 +10,15 @@ export default function PremiumView() {
   const [page, setPage] = useState(1);
   const [limit] = useState(15);
   const [totalPages, setTotalPages] = useState(1);
+  
+  // Category tab: 'full' (Permanent) vs 'temp' (Temporary/Trial)
+  const [codeType, setCodeType] = useState("full");
+  const [usedFilter, setUsedFilter] = useState("all"); // 'all', 'unused', 'used'
+  const [copiedCodeId, setCopiedCodeId] = useState(null);
 
   // Generator Modal
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const [genType, setGenType] = useState("full");
   const [quantity, setQuantity] = useState("20");
   const [prefix, setPrefix] = useState("QZ");
   const [notification, setNotification] = useState(null);
@@ -27,7 +33,10 @@ export default function PremiumView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const params = new URLSearchParams({ page, limit });
+      const params = new URLSearchParams({ page, limit, type: codeType });
+      if (usedFilter === "used") params.append("used", "true");
+      if (usedFilter === "unused") params.append("used", "false");
+
       const res = await fetch(`${API_BASE_URL}/api/admin/premium-codes?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -47,7 +56,30 @@ export default function PremiumView() {
 
   useEffect(() => {
     fetchCodes();
-  }, [page]);
+  }, [page, usedFilter, codeType]);
+
+  const handleCopyCode = (codeText, id) => {
+    navigator.clipboard.writeText(codeText);
+    setCopiedCodeId(id);
+    setTimeout(() => setCopiedCodeId(null), 2000);
+  };
+
+  const handleCopyUnusedCodes = () => {
+    const unusedList = codes.filter(c => !c.used).map(c => c.code);
+    if (unusedList.length === 0) {
+      setNotification({ type: "warning", text: `No unused ${codeType === "temp" ? "temporary" : "full"} codes available on this page to copy.` });
+      setTimeout(() => setNotification(null), 3000);
+      return;
+    }
+    navigator.clipboard.writeText(unusedList.join("\n"));
+    setNotification({ type: "success", text: `Copied ${unusedList.length} unused ${codeType === "temp" ? "temporary" : "full"} code(s) to clipboard!` });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  const openGeneratorModal = () => {
+    setGenType(codeType);
+    setIsGeneratorOpen(true);
+  };
 
   const handleGenerateCodes = async (e) => {
     e.preventDefault();
@@ -61,16 +93,24 @@ export default function PremiumView() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ quantity: parseInt(quantity, 10), prefix }),
+        body: JSON.stringify({ quantity: parseInt(quantity, 10), prefix, type: genType }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to generate codes");
 
       setIsGeneratorOpen(false);
-      setNotification({ type: "success", text: `Generated ${data.count} premium redemption codes!` });
+      setNotification({
+        type: "success",
+        text: `Generated ${data.count} ${genType === "temp" ? "temporary" : "permanent"} premium redemption codes!`,
+      });
       setTimeout(() => setNotification(null), 4000);
-      fetchCodes();
+
+      if (genType !== codeType) {
+        setCodeType(genType);
+      } else {
+        fetchCodes();
+      }
     } catch (err) {
       alert(`Error generating codes: ${err.message}`);
     }
@@ -103,16 +143,16 @@ export default function PremiumView() {
 
   const exportCodesCsv = () => {
     if (codes.length === 0) return;
-    let csv = "Code,Status,Used By,Created At\n";
+    let csv = "Code,Type,Status,Used By,Created At\n";
     codes.forEach(c => {
-      csv += `"${c.code}","${c.used ? "Used" : "Unused"}","${c.used_by_email || "-"}","${c.created_at}"\n`;
+      csv += `"${c.code}","${codeType === "temp" ? "Temporary" : "Full Premium"}","${c.used ? "Used" : "Unused"}","${c.used_by_email || "-"}","${c.created_at}"\n`;
     });
 
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `quizbolt-premium-codes-${Date.now()}.csv`;
+    a.download = `quizbolt-${codeType}-codes-${Date.now()}.csv`;
     a.click();
   };
 
@@ -121,35 +161,46 @@ export default function PremiumView() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
-            <Crown className="w-6 h-6 text-amber-400" />
-            Premium Codes & Monetization
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+              <Crown className="w-6 h-6 text-amber-400" />
+              Monetization & Redemption Codes
+            </h1>
+          </div>
           <p className="text-slate-400 text-xs mt-1">
-            Generate, export, and monitor premium redemption access codes and manage app-wide user premium access.
+            Switch between Full Premium Codes and Temporary Codes. Generate, copy, export, and monitor access codes.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => setIsRevokeAllOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+            className="flex items-center gap-2 px-3.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
           >
             <ShieldAlert className="w-4 h-4 text-red-400" />
             Revoke Everyone's Premium
           </button>
 
           <button
+            onClick={handleCopyUnusedCodes}
+            disabled={codes.length === 0}
+            className="flex items-center gap-2 px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold rounded-xl transition disabled:opacity-50"
+          >
+            <Copy className="w-4 h-4 text-emerald-400" />
+            Copy Unused Codes
+          </button>
+
+          <button
             onClick={exportCodesCsv}
             disabled={codes.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
           >
             <Download className="w-4 h-4 text-slate-400" />
             Export CSV
           </button>
 
           <button
-            onClick={() => setIsGeneratorOpen(true)}
+            onClick={openGeneratorModal}
             className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition"
           >
             <Plus className="w-4 h-4" />
@@ -159,7 +210,11 @@ export default function PremiumView() {
       </div>
 
       {notification && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between">
+        <div className={`p-4 rounded-xl text-xs flex items-center justify-between border ${
+          notification.type === "warning"
+            ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+        }`}>
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-400" />
             <span>{notification.text}</span>
@@ -168,29 +223,142 @@ export default function PremiumView() {
         </div>
       )}
 
+      {/* Code Category Selection Tabs (Full Premium vs Temporary Codes) */}
+      <div className="flex items-center justify-between gap-4 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => { setCodeType("full"); setPage(1); }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition ${
+              codeType === "full"
+                ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            Full Premium Codes (Permanent)
+          </button>
+
+          <button
+            onClick={() => { setCodeType("temp"); setPage(1); }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition ${
+              codeType === "temp"
+                ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            Temporary Premium Codes (Trial)
+          </button>
+        </div>
+
+        <div className="hidden lg:block text-xs text-slate-400 pr-3">
+          Currently Viewing:{" "}
+          <span className={`font-bold ${codeType === "temp" ? "text-cyan-400" : "text-amber-400"}`}>
+            {codeType === "temp" ? "Temporary Access Codes (temp_premium_codes)" : "Full Premium Codes (premium_codes)"}
+          </span>
+        </div>
+      </div>
+
+      {/* Filter Tabs & Badge Info */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-slate-400 ml-1" />
+          <span className="text-xs text-slate-400 font-semibold">Filter Usage Status:</span>
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button
+              onClick={() => { setUsedFilter("all"); setPage(1); }}
+              className={`px-3 py-1 text-xs font-bold rounded-md transition ${
+                usedFilter === "all"
+                  ? codeType === "temp" ? "bg-cyan-500 text-slate-950" : "bg-amber-500 text-slate-950"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              All Codes
+            </button>
+            <button
+              onClick={() => { setUsedFilter("unused"); setPage(1); }}
+              className={`px-3 py-1 text-xs font-bold rounded-md transition ${
+                usedFilter === "unused"
+                  ? "bg-emerald-500 text-slate-950"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Unused Only
+            </button>
+            <button
+              onClick={() => { setUsedFilter("used"); setPage(1); }}
+              className={`px-3 py-1 text-xs font-bold rounded-md transition ${
+                usedFilter === "used"
+                  ? "bg-red-500 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Used Only
+            </button>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-800">
+          Showing: <span className={`font-semibold ${codeType === "temp" ? "text-cyan-400" : "text-amber-400"}`}>
+            {codeType === "temp" ? "Temporary Trial Codes" : "Full Premium Codes"}
+          </span>
+        </div>
+      </div>
+
       {/* Codes Table */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-slate-400">Loading premium codes...</div>
+          <div className="p-12 text-center text-slate-400">Loading {codeType === "temp" ? "temporary" : "premium"} codes...</div>
         ) : codes.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 text-xs">No premium codes found. Generate some above.</div>
+          <div className="p-12 text-center text-slate-500 text-xs">
+            No {codeType === "temp" ? "temporary" : "premium"} codes found. Generate some above.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase font-semibold">
                   <th className="py-3 px-4">Redemption Code</th>
+                  <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Used By User</th>
                   <th className="py-3 px-4">Redeemed Date</th>
                   <th className="py-3 px-4">Created Date</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {codes.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-800/40 transition">
-                    <td className="py-3.5 px-4 font-mono font-bold text-amber-400 tracking-wider text-sm">
-                      {c.code}
+                    <td className={`py-3.5 px-4 font-mono font-bold tracking-wider text-sm ${
+                      codeType === "temp" ? "text-cyan-400" : "text-amber-400"
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span>{c.code}</span>
+                        <button
+                          onClick={() => handleCopyCode(c.code, c.id)}
+                          title="Copy Code"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition"
+                        >
+                          {copiedCodeId === c.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      {codeType === "temp" ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                          Temp Trial
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          Full Premium
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -216,6 +384,27 @@ export default function PremiumView() {
                     <td className="py-3.5 px-4 text-slate-400">
                       {c.created_at ? new Date(c.created_at).toLocaleDateString() : "-"}
                     </td>
+
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => handleCopyCode(c.code, c.id)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                          copiedCodeId === c.id
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                            : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+                        }`}
+                      >
+                        {copiedCodeId === c.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" /> Copy Code
+                          </>
+                        )}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -228,7 +417,7 @@ export default function PremiumView() {
           <div>
             Showing <span className="font-bold text-white">{codes.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
             <span className="font-bold text-white">{Math.min(page * limit, total)}</span> of{" "}
-            <span className="font-bold text-white">{total.toLocaleString()}</span> codes
+            <span className="font-bold text-white">{total.toLocaleString()}</span> {codeType === "temp" ? "temporary" : "full premium"} codes
           </div>
 
           <div className="flex items-center gap-2">
@@ -258,14 +447,26 @@ export default function PremiumView() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <Crown className="w-5 h-5 text-amber-400" />
-                Generate Premium Codes
+                Generate Codes
               </h2>
               <button onClick={() => setIsGeneratorOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleGenerateCodes} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Code Prefix (e.g. QZ, AGENT1, TASUED)</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Code Category</label>
+                <select
+                  value={genType}
+                  onChange={(e) => setGenType(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="full">Full Premium Code (premium_codes)</option>
+                  <option value="temp">Temporary Code (temp_premium_codes)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Code Prefix (e.g. QZ, TEMP, TASUED)</label>
                 <input
                   type="text"
                   placeholder="e.g. QZ"
@@ -286,6 +487,10 @@ export default function PremiumView() {
                   onChange={(e) => setQuantity(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
+              </div>
+
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-[11px]">
+                Note: Generated codes will be saved in the <code className="bg-slate-800 px-1 py-0.5 rounded font-mono">{genType === "temp" ? "temp_premium_codes" : "premium_codes"}</code> table.
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
@@ -353,3 +558,4 @@ export default function PremiumView() {
     </div>
   );
 }
+
