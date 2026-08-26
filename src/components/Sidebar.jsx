@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronRight
 } from "lucide-react";
+import Logo from "../images/Logo";
 
 export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout }) {
   const menuItems = [
@@ -27,13 +28,11 @@ export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800/80 flex flex-col justify-between p-4 min-h-screen text-slate-300 select-none">
-      <div className="space-y-6">
+    <aside className="w-64 h-screen bg-[#0B0F17] border-r border-slate-800/80 flex flex-col justify-between p-4 text-slate-300 select-none shrink-0 overflow-hidden">
+      <div className="space-y-6 flex-1 overflow-y-auto pr-1">
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-2 py-1">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/30">
-            Q
-          </div>
+        <div className="flex items-center gap-3 px-2 py-1 sticky top-0 bg-[#0B0F17] z-10 pb-2">
+          <Logo className="w-10 h-10 shrink-0" />
           <div>
             <div className="font-black text-base text-white tracking-tight leading-none">QuizBolt</div>
             <div className="text-[11px] font-semibold text-indigo-400 mt-1 uppercase tracking-wider">Admin Control</div>
@@ -66,9 +65,9 @@ export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout
         </nav>
       </div>
 
-      {/* Admin Profile & Logout */}
-      <div className="pt-4 border-t border-slate-800/80 space-y-3">
-        <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-800 flex items-center justify-between">
+      {/* Admin Profile & Logout (Pinned to bottom of viewport) */}
+      <div className="pt-4 border-t border-slate-800/80 space-y-3 shrink-0 bg-[#0B0F17]">
+        <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between">
           <div className="overflow-hidden">
             <div className="text-xs font-bold text-white truncate">{adminRecord?.email}</div>
             <div className="text-[10px] font-semibold text-indigo-400 mt-0.5 inline-block px-1.5 py-0.2 bg-indigo-500/10 border border-indigo-500/20 rounded">

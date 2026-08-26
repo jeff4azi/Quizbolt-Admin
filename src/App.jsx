@@ -76,7 +76,7 @@ export default function App() {
 
   if (loadingAuth) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-400 flex flex-col items-center justify-center gap-3">
+      <div className="h-screen bg-slate-950 text-slate-400 flex flex-col items-center justify-center gap-3">
         <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
         <span className="text-xs font-semibold">Initializing QuizBolt Admin...</span>
       </div>
@@ -88,7 +88,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex font-sans antialiased text-slate-100">
+    <div className="h-screen flex overflow-hidden bg-slate-950 font-sans antialiased text-slate-100">
       {/* Desktop Navigation Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -101,7 +101,7 @@ export default function App() {
       />
 
       {/* Main Admin View Content */}
-      <main className="flex-1 overflow-x-hidden min-h-screen bg-slate-950">
+      <main className="flex-1 h-screen overflow-y-auto overflow-x-hidden bg-slate-950">
         {activeTab === "dashboard" && <DashboardView onNavigate={setActiveTab} />}
         {activeTab === "users" && <UsersView />}
         {activeTab === "universities" && <UniversitiesView />}
