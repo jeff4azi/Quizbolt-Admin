@@ -36,11 +36,10 @@ export default function AnalyticsView() {
   }, [universityFilter]);
 
   const exportCsv = () => {
-    if (!data?.courseStats) return;
+    if (!data?.courseStatsList) return;
     let csv = "University,Course Code,Attempts,Retakes,Avg Score %\n";
-    Object.values(data.courseStats).forEach((stats) => {
-      const avg = stats.attempts ? (stats.totalScore / stats.attempts).toFixed(2) : 0;
-      csv += `"${stats.university}","${stats.course_code}",${stats.attempts},${stats.retakes},${avg}\n`;
+    data.courseStatsList.forEach((item) => {
+      csv += `"${item.university}","${item.course_code}",${item.attempts},${item.retakes},${item.avg_score}\n`;
     });
 
     const blob = new Blob([csv], { type: "text/csv" });
@@ -60,14 +59,14 @@ export default function AnalyticsView() {
             University-Scoped Analytics & Telemetry (2.12)
           </h1>
           <p className="text-slate-400 text-xs mt-1">
-            Attempt telemetry scoped by institution and course code to prevent cross-university collisions.
+            Attempt telemetry aggregated across all database rows via PostgreSQL RPC functions (bypassing API row limits).
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={exportCsv}
-            disabled={!data}
+            disabled={!data || !data.courseStatsList}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
           >
             <Download className="w-4 h-4 text-slate-400" /> Export CSV Report
@@ -86,16 +85,16 @@ export default function AnalyticsView() {
           className="px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="">All Universities</option>
+          <option value="TASUED">TASUED</option>
           <option value="BOUESTI">BOUESTI</option>
           <option value="LASU">LASU</option>
-          <option value="TASUED">TASUED</option>
         </select>
       </div>
 
       {loading ? (
         <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-2">
           <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
-          Computing university telemetry...
+          Aggregating all database attempt records...
         </div>
       ) : (
         <div className="space-y-6">
@@ -112,7 +111,7 @@ export default function AnalyticsView() {
 
             <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl">
               <div className="text-[10px] font-bold text-slate-400 uppercase">University-Course Pairs</div>
-              <div className="text-2xl font-black text-emerald-400 mt-1">{Object.keys(data?.courseStats || {}).length}</div>
+              <div className="text-2xl font-black text-emerald-400 mt-1">{(data?.courseStatsList?.length || 0).toLocaleString()}</div>
             </div>
           </div>
 
@@ -121,7 +120,7 @@ export default function AnalyticsView() {
               <GraduationCap className="w-5 h-5 text-indigo-400" />
               Course Attempt Telemetry (Grouped by Institution)
             </h2>
-            {Object.keys(data?.courseStats || {}).length === 0 ? (
+            {!data?.courseStatsList || data.courseStatsList.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">No attempt telemetry recorded for this filter.</div>
             ) : (
               <table className="w-full text-left text-xs border-collapse">
@@ -135,18 +134,15 @@ export default function AnalyticsView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {Object.values(data?.courseStats || {}).map((item, idx) => {
-                    const avg = item.attempts ? (item.totalScore / item.attempts).toFixed(1) : 0;
-                    return (
-                      <tr key={idx} className="hover:bg-slate-800/40 transition">
-                        <td className="py-3.5 px-4 font-bold text-indigo-300">{item.university}</td>
-                        <td className="py-3.5 px-4 font-bold text-white">{item.course_code}</td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-200">{item.attempts}</td>
-                        <td className="py-3.5 px-4 text-purple-300 font-medium">{item.retakes}</td>
-                        <td className="py-3.5 px-4 font-bold text-emerald-400">{avg}%</td>
-                      </tr>
-                    );
-                  })}
+                  {data.courseStatsList.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/40 transition">
+                      <td className="py-3.5 px-4 font-bold text-indigo-300">{item.university}</td>
+                      <td className="py-3.5 px-4 font-bold text-white">{item.course_code}</td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-200">{item.attempts.toLocaleString()}</td>
+                      <td className="py-3.5 px-4 text-purple-300 font-medium">{item.retakes.toLocaleString()}</td>
+                      <td className="py-3.5 px-4 font-bold text-emerald-400">{item.avg_score}%</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}
