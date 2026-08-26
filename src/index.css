@@ -1,9 +1,1 @@
 @import "tailwindcss";
-
-body {
-  @apply font-sans bg-white;
-}
-
-ol {
-  @apply pl-7 max-w-[80%];
-}
