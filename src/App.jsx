@@ -1,32 +1,124 @@
-import React from 'react';
-import QuestionBank from './components/QuestionBank';
+import React, { useState, useEffect } from "react";
+import { supabase } from "./lib/supabaseClient";
+import Login from "./components/Login";
+import Sidebar from "./components/Sidebar";
+import DashboardView from "./components/DashboardView";
+import UsersView from "./components/UsersView";
+import UniversitiesView from "./components/UniversitiesView";
+import CoursesView from "./components/CoursesView";
+import QuestionBank from "./components/QuestionBank";
+import PremiumView from "./components/PremiumView";
+import ReviewsView from "./components/ReviewsView";
+import ContentCmsView from "./components/ContentCmsView";
+import AuditLogView from "./components/AuditLogView";
+import { RefreshCw } from "lucide-react";
 
-const App = () => {
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [adminRecord, setAdminRecord] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedCourseCode, setSelectedCourseCode] = useState("");
+
+  // Check initial Supabase auth session & verify admin role
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const currentUser = sessionData?.session?.user;
+
+        if (currentUser) {
+          const { data: adminData } = await supabase
+            .from("admin_users")
+            .select("*")
+            .eq("id", currentUser.id)
+            .eq("active", true)
+            .single();
+
+          if (adminData) {
+            setUser(currentUser);
+            setAdminRecord(adminData);
+          } else {
+            await supabase.auth.signOut();
+          }
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
+      } finally {
+        setLoadingAuth(false);
+      }
+    }
+
+    checkAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        setUser(null);
+        setAdminRecord(null);
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  const handleLoginSuccess = (authUser, adminRec) => {
+    setUser(authUser);
+    setAdminRecord(adminRec);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setAdminRecord(null);
+  };
+
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-400 flex flex-col items-center justify-center gap-3">
+        <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
+        <span className="text-xs font-semibold">Initializing QuizBolt Admin...</span>
+      </div>
+    );
+  }
+
+  if (!user || !adminRecord) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-black text-white text-lg">
-              Q
-            </div>
-            <span className="font-bold text-lg tracking-tight text-white">QuizBolt Admin</span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">
-              v1.0
-            </span>
-          </div>
+    <div className="min-h-screen bg-slate-950 flex font-sans antialiased text-slate-100">
+      {/* Desktop Navigation Sidebar */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={(tab) => {
+          if (tab !== "questions") setSelectedCourseCode("");
+          setActiveTab(tab);
+        }}
+        adminRecord={adminRecord}
+        onLogout={handleLogout}
+      />
 
-          <div className="flex items-center gap-4 text-xs text-slate-400">
-            <span>Environment: <strong className="text-emerald-400 font-mono">Production DB Connected</strong></span>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-6">
-        <QuestionBank />
+      {/* Main Admin View Content */}
+      <main className="flex-1 overflow-x-hidden min-h-screen bg-slate-950">
+        {activeTab === "dashboard" && <DashboardView onNavigate={setActiveTab} />}
+        {activeTab === "users" && <UsersView />}
+        {activeTab === "universities" && <UniversitiesView />}
+        {activeTab === "courses" && (
+          <CoursesView
+            onNavigateToQuestions={(code) => {
+              setSelectedCourseCode(code);
+              setActiveTab("questions");
+            }}
+          />
+        )}
+        {activeTab === "questions" && <QuestionBank initialCourseCode={selectedCourseCode} />}
+        {activeTab === "premium" && <PremiumView />}
+        {activeTab === "reviews" && <ReviewsView />}
+        {activeTab === "cms" && <ContentCmsView />}
+        {activeTab === "audit" && <AuditLogView />}
       </main>
     </div>
   );
-};
-
-export default App;
+}

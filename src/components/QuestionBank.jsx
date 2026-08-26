@@ -19,7 +19,7 @@ import {
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
-export default function QuestionBank() {
+export default function QuestionBank({ initialCourseCode = "" }) {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -30,7 +30,7 @@ export default function QuestionBank() {
   // Filters
   const [search, setSearch] = useState("");
   const [university, setUniversity] = useState("");
-  const [courseCode, setCourseCode] = useState("");
+  const [courseCode, setCourseCode] = useState(initialCourseCode);
   const [type, setType] = useState("");
   const [difficulty, setDifficulty] = useState("");
 
@@ -52,7 +52,7 @@ export default function QuestionBank() {
   // Form State for Add/Edit
   const [formData, setFormData] = useState({
     question_id: "",
-    course_code: "",
+    course_code: initialCourseCode || "",
     university: "BOUESTI",
     type: "objective",
     question: "",
@@ -69,7 +69,6 @@ export default function QuestionBank() {
     answersStr: "",
   });
 
-  // Fetch Questions
   const fetchQuestions = async () => {
     setLoading(true);
     try {
@@ -95,7 +94,6 @@ export default function QuestionBank() {
         .range(fromIndex, toIndex);
 
       const { data, count, error } = await query;
-
       if (error) throw error;
 
       setQuestions(data || []);
@@ -108,7 +106,6 @@ export default function QuestionBank() {
     }
   };
 
-  // Fetch Stats
   const fetchStats = async () => {
     try {
       const { count: totalC } = await supabase.from("questions").select("*", { count: "exact", head: true });
@@ -145,7 +142,7 @@ export default function QuestionBank() {
     setEditingQuestion(null);
     setFormData({
       question_id: "",
-      course_code: "",
+      course_code: courseCode || "",
       university: "BOUESTI",
       type: "objective",
       question: "",
@@ -190,6 +187,9 @@ export default function QuestionBank() {
   const handleSaveQuestion = async (e) => {
     e.preventDefault();
     try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
       const options =
         formData.type === "objective"
           ? [formData.optionA, formData.optionB, formData.optionC, formData.optionD].filter(Boolean)
@@ -225,13 +225,19 @@ export default function QuestionBank() {
       if (editingQuestion) {
         res = await fetch(`${API_BASE_URL}/api/admin/questions/${editingQuestion.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(payload),
         });
       } else {
         res = await fetch(`${API_BASE_URL}/api/admin/questions`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(payload),
         });
       }
@@ -251,8 +257,12 @@ export default function QuestionBank() {
   const handleDeleteQuestion = async (id, questionId) => {
     if (!window.confirm(`Are you sure you want to delete question ${questionId}?`)) return;
     try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
       const res = await fetch(`${API_BASE_URL}/api/admin/questions/${id}`, {
         method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to delete question");
 
@@ -267,12 +277,18 @@ export default function QuestionBank() {
 
   const handleBulkImport = async () => {
     try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
       const parsed = JSON.parse(bulkJsonText);
       const questionsArray = Array.isArray(parsed) ? parsed : [parsed];
 
       const res = await fetch(`${API_BASE_URL}/api/admin/questions/bulk-import`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ questions: questionsArray }),
       });
 
@@ -291,31 +307,31 @@ export default function QuestionBank() {
   };
 
   return (
-    <div className="p-6 space-y-6 bg-slate-50 min-h-screen text-slate-800">
+    <div className="p-6 space-y-6 text-slate-100">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <BookOpen className="w-7 h-7 text-indigo-600" />
-            Question Bank Management
+          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+            <BookOpen className="w-6 h-6 text-indigo-400" />
+            Question Bank Repository
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Manage 13,000+ objective, theory, and fill-in-blank questions stored in Supabase DB.
+          <p className="text-slate-400 text-xs mt-1">
+            Manage 13,800+ objective, theory, and fill-in-blank questions stored in Supabase Postgres DB.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsBulkModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-sm font-medium transition shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 rounded-xl text-xs font-bold transition shadow-sm"
           >
-            <Upload className="w-4 h-4 text-slate-500" />
+            <Upload className="w-4 h-4 text-slate-400" />
             Bulk Import (JSON)
           </button>
 
           <button
             onClick={openAddModal}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium transition shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/30"
           >
             <Plus className="w-4 h-4" />
             Add Question
@@ -323,93 +339,85 @@ export default function QuestionBank() {
         </div>
       </div>
 
-      {/* Action Notification Alert */}
       {actionMessage && (
-        <div className={`p-4 rounded-lg flex items-center justify-between text-sm ${actionMessage.type === "success" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Check className="w-5 h-5 text-emerald-600" />
+            <Check className="w-4 h-4 text-emerald-400" />
             <span>{actionMessage.text}</span>
           </div>
-          <button onClick={() => setActionMessage(null)} className="text-slate-400 hover:text-slate-600">
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={() => setActionMessage(null)}><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+        <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-center gap-4">
+          <div className="p-3 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl">
             <BookOpen className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Questions</div>
-            <div className="text-xl font-bold text-slate-900">{stats.total.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Questions</div>
+            <div className="text-xl font-black text-white">{stats.total.toLocaleString()}</div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+        <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-center gap-4">
+          <div className="p-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl">
             <HelpCircle className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Objective (MCQ)</div>
-            <div className="text-xl font-bold text-slate-900">{stats.objective.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Objective (MCQ)</div>
+            <div className="text-xl font-black text-white">{stats.objective.toLocaleString()}</div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg">
+        <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-center gap-4">
+          <div className="p-3 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-xl">
             <FileText className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Theory</div>
-            <div className="text-xl font-bold text-slate-900">{stats.theory.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Theory</div>
+            <div className="text-xl font-black text-white">{stats.theory.toLocaleString()}</div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+        <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg flex items-center gap-4">
+          <div className="p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl">
             <Check className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fill-in-Blank (FIB)</div>
-            <div className="text-xl font-bold text-slate-900">{stats.fib.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fill-in-Blank</div>
+            <div className="text-xl font-black text-white">{stats.fib.toLocaleString()}</div>
           </div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-3">
+      <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg space-y-3">
+        <form onSubmit={handleSearchSubmit} className="flex gap-3">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
             <input
               type="text"
-              placeholder="Search question text or Question ID..."
+              placeholder="Search question prompt or Question ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+              className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
-          <button
-            type="submit"
-            className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium transition"
-          >
+          <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition">
             Search
           </button>
         </form>
 
-        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-1 font-semibold text-slate-500">
-            <Filter className="w-3.5 h-3.5" /> Filter by:
-          </div>
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80 text-xs">
+          <span className="text-slate-500 font-semibold flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Filter:</span>
 
           <select
             value={university}
             onChange={(e) => { setUniversity(e.target.value); setPage(1); }}
-            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Universities</option>
             <option value="BOUESTI">BOUESTI</option>
@@ -420,18 +428,18 @@ export default function QuestionBank() {
           <select
             value={type}
             onChange={(e) => { setType(e.target.value); setPage(1); }}
-            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Types</option>
             <option value="objective">Objective (MCQ)</option>
             <option value="theory">Theory</option>
-            <option value="fib">Fill in the Blank</option>
+            <option value="fib">Fill in Blank</option>
           </select>
 
           <select
             value={difficulty}
             onChange={(e) => { setDifficulty(e.target.value); setPage(1); }}
-            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Difficulties</option>
             <option value="Easy">Easy</option>
@@ -441,10 +449,10 @@ export default function QuestionBank() {
 
           <input
             type="text"
-            placeholder="Course Code (e.g. CSC115)..."
+            placeholder="Course (e.g. CSC115)..."
             value={courseCode}
             onChange={(e) => { setCourseCode(e.target.value); setPage(1); }}
-            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 w-44"
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-44"
           />
 
           {(university || type || difficulty || courseCode || search) && (
@@ -452,7 +460,7 @@ export default function QuestionBank() {
               onClick={() => {
                 setUniversity(""); setType(""); setDifficulty(""); setCourseCode(""); setSearch(""); setPage(1);
               }}
-              className="text-indigo-600 hover:text-indigo-800 font-medium underline ml-auto"
+              className="text-indigo-400 hover:text-indigo-300 font-semibold underline ml-auto"
             >
               Reset Filters
             </button>
@@ -461,77 +469,66 @@ export default function QuestionBank() {
       </div>
 
       {/* Questions Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-slate-500 flex flex-col items-center gap-2">
-            <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
-            Loading questions from database...
+          <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-2">
+            <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
+            Querying Supabase database...
           </div>
         ) : questions.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 flex flex-col items-center gap-2">
-            <AlertCircle className="w-8 h-8 text-amber-500" />
-            <p className="font-semibold text-slate-700">No questions found</p>
-            <p className="text-xs">Try clearing search or filters to see questions.</p>
+          <div className="p-12 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+            <AlertCircle className="w-8 h-8 text-amber-400" />
+            <p className="font-semibold text-slate-300">No questions found</p>
+            <p className="text-[11px]">Try clearing search parameters.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
+            <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase font-semibold">
                   <th className="py-3 px-4">Code / ID</th>
-                  <th className="py-3 px-4">University</th>
+                  <th className="py-3 px-4">Uni</th>
                   <th className="py-3 px-4">Type</th>
                   <th className="py-3 px-4 w-2/5">Question Text</th>
                   <th className="py-3 px-4">Answer / Explanation</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-800/60">
                 {questions.map((q) => (
-                  <tr key={q.id} className="hover:bg-slate-50 transition">
+                  <tr key={q.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-indigo-600">{q.course_code}</div>
-                      <div className="text-xs text-slate-400">{q.question_id}</div>
+                      <div className="font-bold text-indigo-400">{q.course_code}</div>
+                      <div className="text-[11px] text-slate-500">{q.question_id}</div>
                     </td>
 
-                    <td className="py-3.5 px-4 text-xs font-medium text-slate-700">
-                      {q.university}
-                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-slate-300">{q.university}</td>
 
                     <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
                         q.type === "objective"
-                          ? "bg-blue-50 text-blue-700 border border-blue-200"
+                          ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
                           : q.type === "theory"
-                          ? "bg-purple-50 text-purple-700 border border-purple-200"
-                          : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                          : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                       }`}>
                         {q.type}
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4 text-slate-800">
+                    <td className="py-3.5 px-4 text-slate-200">
                       <div className="line-clamp-2 font-medium">{q.question}</div>
-                      {q.difficulty && (
-                        <span className="text-[10px] text-slate-400 mt-0.5 inline-block">Difficulty: {q.difficulty}</span>
-                      )}
                     </td>
 
-                    <td className="py-3.5 px-4 text-xs text-slate-600">
+                    <td className="py-3.5 px-4 text-slate-400">
                       {q.type === "objective" && (
-                        <div className="line-clamp-2">
-                          <span className="font-semibold text-emerald-700">Ans:</span> {q.correct}
-                        </div>
+                        <div className="line-clamp-2"><span className="text-emerald-400 font-bold">Ans:</span> {q.correct}</div>
                       )}
                       {q.type === "theory" && (
-                        <div className="line-clamp-2">
-                          <span className="font-semibold text-purple-700">Ans:</span> {q.model_answer || "See keywords"}
-                        </div>
+                        <div className="line-clamp-2"><span className="text-purple-400 font-bold">Ans:</span> {q.model_answer || "Keywords set"}</div>
                       )}
                       {q.type === "fib" && (
-                        <div className="line-clamp-2">
-                          <span className="font-semibold text-emerald-700">Ans:</span> {q.answers ? JSON.stringify(q.answers) : "-"}
-                        </div>
+                        <div className="line-clamp-2"><span className="text-emerald-400 font-bold">Ans:</span> {q.answers ? JSON.stringify(q.answers) : "-"}</div>
                       )}
                     </td>
 
@@ -539,14 +536,14 @@ export default function QuestionBank() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEditModal(q)}
-                          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition"
                           title="Edit Question"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteQuestion(q.id, q.question_id)}
-                          className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
                           title="Delete Question"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -561,28 +558,26 @@ export default function QuestionBank() {
         )}
 
         {/* Pagination Bar */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+        <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <div>
-            Showing <span className="font-semibold">{questions.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
-            <span className="font-semibold">{Math.min(page * limit, total)}</span> of{" "}
-            <span className="font-semibold">{total.toLocaleString()}</span> questions
+            Showing <span className="font-bold text-white">{questions.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
+            <span className="font-bold text-white">{Math.min(page * limit, total)}</span> of{" "}
+            <span className="font-bold text-white">{total.toLocaleString()}</span> questions
           </div>
 
           <div className="flex items-center gap-2">
             <button
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
-              className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1"
+              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
             >
-              <ChevronLeft className="w-4 h-4" /> Previous
+              <ChevronLeft className="w-4 h-4" /> Prev
             </button>
-
-            <span className="font-semibold px-2">Page {page} of {totalPages}</span>
-
+            <span className="font-semibold text-slate-300 px-2">Page {page} of {totalPages}</span>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
-              className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1"
+              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
@@ -590,51 +585,47 @@ export default function QuestionBank() {
         </div>
       </div>
 
-      {/* Add / Edit Question Modal */}
+      {/* Edit Question Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-lg font-bold text-slate-900">
-                {editingQuestion ? `Edit Question (${formData.question_id})` : "Create New Question"}
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-base font-bold text-white">
+                {editingQuestion ? `Edit Question (${formData.question_id})` : "Add Question"}
               </h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={handleSaveQuestion} className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <form onSubmit={handleSaveQuestion} className="space-y-4 text-xs">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Question ID</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">Question ID</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. CSC115-001"
+                    placeholder="CSC115-001"
                     value={formData.question_id}
                     onChange={(e) => setFormData({ ...formData, question_id: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Course Code</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">Course Code</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. CSC115"
+                    placeholder="CSC115"
                     value={formData.course_code}
                     onChange={(e) => setFormData({ ...formData, course_code: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 uppercase"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white uppercase focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">University</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">University</label>
                   <select
                     value={formData.university}
                     onChange={(e) => setFormData({ ...formData, university: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="BOUESTI">BOUESTI</option>
                     <option value="LASU">LASU</option>
@@ -643,158 +634,86 @@ export default function QuestionBank() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Type</label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="objective">Objective (MCQ)</option>
-                    <option value="theory">Theory</option>
-                    <option value="fib">Fill in Blank (FIB)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Difficulty</label>
-                  <select
-                    value={formData.difficulty}
-                    onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Easy">Easy</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Hard">Hard</option>
-                  </select>
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Question Prompt</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Question Text</label>
                 <textarea
                   required
                   rows={3}
-                  placeholder="Enter the question text (KaTeX LaTeX formulas like $x^2$ supported)..."
                   value={formData.question}
                   onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
-              {/* Options for Objective */}
               {formData.type === "objective" && (
-                <div className="space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <span className="text-xs font-bold text-slate-700">Multiple Choice Options</span>
+                <div className="space-y-2 p-3 bg-slate-800/60 rounded-xl border border-slate-800">
+                  <span className="text-[11px] font-bold text-slate-300">MCQ Options</span>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Option A"
                       value={formData.optionA}
                       onChange={(e) => setFormData({ ...formData, optionA: e.target.value })}
-                      className="px-3 py-1.5 bg-white border border-slate-200 rounded-md focus:ring-1 focus:ring-indigo-500"
+                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option B"
                       value={formData.optionB}
                       onChange={(e) => setFormData({ ...formData, optionB: e.target.value })}
-                      className="px-3 py-1.5 bg-white border border-slate-200 rounded-md focus:ring-1 focus:ring-indigo-500"
+                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option C"
                       value={formData.optionC}
                       onChange={(e) => setFormData({ ...formData, optionC: e.target.value })}
-                      className="px-3 py-1.5 bg-white border border-slate-200 rounded-md focus:ring-1 focus:ring-indigo-500"
+                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option D"
                       value={formData.optionD}
                       onChange={(e) => setFormData({ ...formData, optionD: e.target.value })}
-                      className="px-3 py-1.5 bg-white border border-slate-200 rounded-md focus:ring-1 focus:ring-indigo-500"
+                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1 mt-2">Correct Answer String</label>
+                    <label className="block text-slate-400 mb-1 mt-2">Correct Answer String</label>
                     <input
                       type="text"
-                      placeholder="Exact option string matching correct choice..."
+                      placeholder="Exact option string..."
                       value={formData.correct}
                       onChange={(e) => setFormData({ ...formData, correct: e.target.value })}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md focus:ring-1 focus:ring-indigo-500"
+                      className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
                     />
                   </div>
-                </div>
-              )}
-
-              {/* Fields for Theory */}
-              {formData.type === "theory" && (
-                <div className="space-y-3 p-3 bg-purple-50/50 rounded-lg border border-purple-100">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Model Answer</label>
-                    <textarea
-                      rows={2}
-                      placeholder="Full model answer for reference..."
-                      value={formData.model_answer}
-                      onChange={(e) => setFormData({ ...formData, model_answer: e.target.value })}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Keywords JSON e.g. [["financial"], ["profit", "loss"]]</label>
-                    <input
-                      type="text"
-                      placeholder='[["keyword1"], ["keyword2"]]'
-                      value={formData.keywordsStr}
-                      onChange={(e) => setFormData({ ...formData, keywordsStr: e.target.value })}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md font-mono text-xs focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Fields for FIB */}
-              {formData.type === "fib" && (
-                <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">FIB Accepted Answers JSON e.g. [["CPU", "Central Processing Unit"]]</label>
-                  <input
-                    type="text"
-                    placeholder='[["answer1", "variant"]]'
-                    value={formData.answersStr}
-                    onChange={(e) => setFormData({ ...formData, answersStr: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md font-mono text-xs focus:ring-1 focus:ring-indigo-500"
-                  />
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Explanation / Reason</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Explanation / Reason</label>
                 <textarea
                   rows={2}
-                  placeholder="Detailed explanation of the solution..."
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 font-medium hover:bg-slate-100 transition"
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition"
                 >
-                  {editingQuestion ? "Save Changes" : "Create Question"}
+                  Save Question
                 </button>
               </div>
             </form>
@@ -804,55 +723,37 @@ export default function QuestionBank() {
 
       {/* Bulk Import Modal */}
       {isBulkModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-3xl w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Upload className="w-5 h-5 text-indigo-600" />
-                Bulk Question Import (JSON Array)
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-400" />
+                Bulk Question Import (JSON)
               </h2>
-              <button onClick={() => setIsBulkModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setIsBulkModalOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Paste a JSON array of question objects (containing <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">question_id</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">course_code</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">university</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">type</code>, and <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">question</code>).
-            </p>
-
             <textarea
-              rows={12}
-              placeholder={`[
-  {
-    "question_id": "CSC115-999",
-    "course_code": "CSC115",
-    "university": "BOUESTI",
-    "type": "objective",
-    "question": "What is RAM?",
-    "options": ["Random Access Memory", "Read Access Memory", "Rapid Action Memory", "Real Action Memory"],
-    "correct": "Random Access Memory",
-    "reason": "RAM stands for Random Access Memory."
-  }
-]`}
+              rows={10}
+              placeholder='[{"question_id": "CSC115-999", "course_code": "CSC115", "university": "BOUESTI", "type": "objective", "question": "...", "options": ["A", "B", "C", "D"], "correct": "A"}]'
               value={bulkJsonText}
               onChange={(e) => setBulkJsonText(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900 text-emerald-400 font-mono text-xs rounded-lg border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-slate-950 text-emerald-400 font-mono text-xs border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
               <button
-                type="button"
                 onClick={() => setIsBulkModalOpen(false)}
-                className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 font-medium hover:bg-slate-100 transition"
+                className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl"
               >
                 Cancel
               </button>
               <button
                 onClick={handleBulkImport}
                 disabled={!bulkJsonText.trim()}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition"
+                className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl disabled:opacity-50"
               >
-                Execute Bulk Import
+                Run Bulk Import
               </button>
             </div>
           </div>
