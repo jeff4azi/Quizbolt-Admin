@@ -72,7 +72,7 @@ export default function LeaderboardView() {
         <button
           onClick={handleRecompute}
           disabled={recomputing}
-          className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${recomputing ? "animate-spin" : ""}`} />
           Recompute Leaderboard Now

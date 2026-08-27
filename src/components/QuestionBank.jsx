@@ -418,7 +418,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
 
           <button
             onClick={openAddModal}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/30"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg"
           >
             <Plus className="w-4 h-4" />
             Add Question
@@ -937,7 +937,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition shadow-lg shadow-indigo-600/30"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition shadow-lg"
                 >
                   Save Question
                 </button>
@@ -1018,7 +1018,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                 <button
                   onClick={handleBulkImport}
                   disabled={!bulkJsonText.trim()}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50 transition shadow-lg shadow-indigo-600/30"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50 transition shadow-lg"
                 >
                   Run Bulk Import
                 </button>

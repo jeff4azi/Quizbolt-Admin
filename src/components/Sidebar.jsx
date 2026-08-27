@@ -60,7 +60,7 @@ export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+                    ? "bg-indigo-600 text-white shadow-lg"
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
                 }`}
               >

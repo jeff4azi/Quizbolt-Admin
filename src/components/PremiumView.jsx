@@ -247,7 +247,7 @@ export default function PremiumView() {
 
           <button
             onClick={openGeneratorModal}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition"
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition"
           >
             <Plus className="w-4 h-4" />
             Bulk Code Generator
@@ -276,7 +276,7 @@ export default function PremiumView() {
             onClick={() => { setCodeType("full"); setPage(1); }}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition ${
               codeType === "full"
-                ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                ? "bg-amber-500 text-slate-950 shadow-md"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
             }`}
           >
@@ -288,7 +288,7 @@ export default function PremiumView() {
             onClick={() => { setCodeType("temp"); setPage(1); }}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition ${
               codeType === "temp"
-                ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+                ? "bg-cyan-500 text-slate-950 shadow-md"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
             }`}
           >
@@ -581,7 +581,7 @@ export default function PremiumView() {
               <button
                 disabled={isRevoking}
                 onClick={handleConfirmRevokeAll}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/30 transition flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
                 {isRevoking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
                 Yes, Revoke All Premium
@@ -668,7 +668,7 @@ export default function PremiumView() {
               <button
                 disabled={isDeletingCodes}
                 onClick={handleConfirmDeleteAllCodes}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/30 transition flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
                 {isDeletingCodes ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 Yes, Delete Selected Codes

@@ -527,7 +527,7 @@ export default function UsersView() {
               <button
                 disabled={isClearingFavs}
                 onClick={handleConfirmClearAllFavourites}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/30 transition flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
                 {isClearingFavs ? <RefreshCw className="w-4 h-4 animate-spin" /> : <HeartOff className="w-4 h-4" />}
                 Yes, Clear All Favourites
@@ -571,7 +571,7 @@ export default function UsersView() {
               <button
                 disabled={isIncrementingLevel}
                 onClick={handleConfirmIncrementLevel}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
                 {isIncrementingLevel ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
                 Yes, Promote Everyone +1

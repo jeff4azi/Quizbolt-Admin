@@ -94,7 +94,7 @@ export default function NotificationsView() {
           </button>
           <button
             onClick={() => { setForm({ title: "", body: "", target: "all" }); setIsModalOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition"
           >
             <Send className="w-4 h-4" /> Send Push Broadcast
           </button>
@@ -393,7 +393,7 @@ export default function NotificationsView() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition flex items-center gap-1.5"
                 >
                   <Send className="w-4 h-4" /> Send Broadcast
                 </button>

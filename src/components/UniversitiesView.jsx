@@ -190,7 +190,7 @@ export default function UniversitiesView() {
 
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition"
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition"
         >
           <Plus className="w-4 h-4" /> Add New University
         </button>
@@ -369,7 +369,7 @@ export default function UniversitiesView() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl shadow-lg shadow-purple-600/30 transition"
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl shadow-lg transition"
                 >
                   {editingUni ? "Save Changes" : "Create University"}
                 </button>
@@ -407,7 +407,7 @@ export default function UniversitiesView() {
               </button>
               <button
                 onClick={handleConfirmRollover}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-purple-600/30"
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shadow-lg"
               >
                 Yes, Execute Rollover
               </button>

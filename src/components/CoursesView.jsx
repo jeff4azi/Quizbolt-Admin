@@ -196,7 +196,7 @@ export default function CoursesView({ onNavigateToQuestions }) {
 
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition"
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition"
         >
           <Plus className="w-4 h-4" /> Add New Course
         </button>
@@ -463,7 +463,7 @@ export default function CoursesView({ onNavigateToQuestions }) {
                             onClick={() => toggleCollegeSelection(c.id)}
                             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
                               isSelected
-                                ? "bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/20"
+                                ? "bg-indigo-600 text-white border-indigo-500 shadow-md"
                                 : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200 hover:bg-slate-700"
                             }`}
                           >

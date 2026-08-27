@@ -102,7 +102,7 @@ export default function ReviewsView() {
           onClick={() => setTab("pending")}
           className={`px-4 py-2 rounded-xl font-bold text-xs transition ${
             tab === "pending"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+              ? "bg-indigo-600 text-white shadow-lg"
               : "bg-slate-800 text-slate-400 hover:text-white"
           }`}
         >
@@ -113,7 +113,7 @@ export default function ReviewsView() {
           onClick={() => setTab("approved")}
           className={`px-4 py-2 rounded-xl font-bold text-xs transition ${
             tab === "approved"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+              ? "bg-indigo-600 text-white shadow-lg"
               : "bg-slate-800 text-slate-400 hover:text-white"
           }`}
         >
@@ -147,7 +147,7 @@ export default function ReviewsView() {
                 {tab === "pending" && (
                   <button
                     onClick={() => handleApprove(rev.id)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/30"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg"
                   >
                     <Check className="w-4 h-4" /> Approve
                   </button>

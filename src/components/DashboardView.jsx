@@ -66,7 +66,7 @@ export default function DashboardView({ onNavigate }) {
         <div className="flex items-center gap-3">
           <button
             onClick={() => onNavigate("questions")}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/30"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg"
           >
             Manage Question Bank
           </button>
