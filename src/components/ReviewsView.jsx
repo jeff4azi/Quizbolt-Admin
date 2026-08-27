@@ -130,16 +130,36 @@ export default function ReviewsView() {
             No {tab} reviews found.
           </div>
         ) : (
-          reviews.map((rev) => (
-            <div key={rev.id} className="p-5 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm">{rev.user_name || "Student"}</span>
-                  <span className="text-[10px] text-indigo-400 font-semibold px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded">
-                    {rev.university || "TASUED"}
-                  </span>
+        reviews.map((rev) => (
+            <div key={rev.id} className="p-5 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-start justify-between gap-4">
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Avatar letter */}
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-black text-indigo-400">
+                      {(rev.full_name || rev.user_name || "?")[0].toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-white text-sm">
+                      {rev.full_name || rev.user_name || "Unknown Student"}
+                    </span>
+                    {rev.user_name && rev.full_name && (
+                      <span className="text-[10px] text-slate-500 ml-1.5">@{rev.user_name}</span>
+                    )}
+                  </div>
+                  {rev.university && (
+                    <span className="text-[10px] text-indigo-400 font-semibold px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded">
+                      {rev.university}
+                    </span>
+                  )}
+                  {rev.department && (
+                    <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-800 rounded">
+                      {rev.department}{rev.year ? ` · Yr ${rev.year}` : ""}
+                    </span>
+                  )}
                 </div>
-                <p className="text-slate-300 text-xs italic">"{rev.review_text}"</p>
+                <p className="text-slate-300 text-xs italic leading-relaxed">"{rev.review_text}"</p>
                 <div className="text-[10px] text-slate-500">{new Date(rev.created_at).toLocaleString()}</div>
               </div>
 
@@ -147,7 +167,7 @@ export default function ReviewsView() {
                 {tab === "pending" && (
                   <button
                     onClick={() => handleApprove(rev.id)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition"
                   >
                     <Check className="w-4 h-4" /> Approve
                   </button>

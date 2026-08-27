@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert, Copy, Filter, Sparkles, Clock, Trash2 } from "lucide-react";
+import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert, Copy, Filter, Sparkles, Clock, Trash2, BarChart3, GraduationCap } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
@@ -31,6 +31,11 @@ export default function PremiumView() {
   const [deleteTarget, setDeleteTarget] = useState("active"); // 'active' (current tab) or 'both'
   const [isDeletingCodes, setIsDeletingCodes] = useState(false);
 
+  // University overview stats
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [uniFilter, setUniFilter] = useState("");
+
   const fetchCodes = async () => {
     setLoading(true);
     try {
@@ -58,9 +63,25 @@ export default function PremiumView() {
     }
   };
 
-  useEffect(() => {
-    fetchCodes();
-  }, [page, usedFilter, codeType]);
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const params = uniFilter ? `?university=${encodeURIComponent(uniFilter)}` : "";
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-codes/stats${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setStats(await res.json());
+    } catch (err) {
+      console.error("Error fetching code stats:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchCodes(); }, [page, usedFilter, codeType]);
+  useEffect(() => { fetchStats(); }, [uniFilter]);
 
   const handleCopyCode = (codeText, id) => {
     navigator.clipboard.writeText(codeText);
@@ -268,6 +289,127 @@ export default function PremiumView() {
           <button onClick={() => setNotification(null)}><X className="w-4 h-4" /></button>
         </div>
       )}
+
+      {/* ── University Code Redemption Overview ── */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-sm font-black text-white">Code Redemption Overview</h2>
+          </div>
+          <select
+            value={uniFilter}
+            onChange={(e) => setUniFilter(e.target.value)}
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full sm:w-auto"
+          >
+            <option value="">All Universities</option>
+            <option value="TASUED">TASUED</option>
+            <option value="LASU">LASU</option>
+            <option value="BOUESTI">BOUESTI</option>
+          </select>
+        </div>
+
+        {statsLoading ? (
+          <div className="flex items-center justify-center py-8 text-slate-500 text-xs gap-2">
+            <RefreshCw className="w-4 h-4 animate-spin" /> Loading stats...
+          </div>
+        ) : stats ? (
+          <>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-xl border bg-amber-500/5 border-amber-500/20">
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Full — Total</div>
+                <div className="text-xl font-black text-amber-400 mt-1">{stats.full.total.toLocaleString()}</div>
+              </div>
+              <div className="p-3.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Full — Used</div>
+                <div className="text-xl font-black text-emerald-400 mt-1">{stats.full.used.toLocaleString()}</div>
+              </div>
+              <div className="p-3.5 rounded-xl border bg-cyan-500/5 border-cyan-500/20">
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Temp — Total</div>
+                <div className="text-xl font-black text-cyan-400 mt-1">{stats.temp.total.toLocaleString()}</div>
+              </div>
+              <div className="p-3.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Temp — Used</div>
+                <div className="text-xl font-black text-emerald-400 mt-1">{stats.temp.used.toLocaleString()}</div>
+              </div>
+            </div>
+
+            {/* Redemption rates */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(() => {
+                const fullRate = stats.full.total > 0 ? ((stats.full.used / stats.full.total) * 100).toFixed(1) : "0.0";
+                const tempRate = stats.temp.total > 0 ? ((stats.temp.used / stats.temp.total) * 100).toFixed(1) : "0.0";
+                return (
+                  <>
+                    <div className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase mb-2">Full Premium Redemption Rate</div>
+                      <div className="flex items-end gap-2">
+                        <span className="text-2xl font-black text-amber-400">{fullRate}%</span>
+                        <span className="text-[10px] text-slate-500 mb-1">{stats.full.used} / {stats.full.total} codes</span>
+                      </div>
+                      <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${Math.min(parseFloat(fullRate), 100)}%` }} />
+                      </div>
+                    </div>
+                    <div className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase mb-2">Temp Premium Redemption Rate</div>
+                      <div className="flex items-end gap-2">
+                        <span className="text-2xl font-black text-cyan-400">{tempRate}%</span>
+                        <span className="text-[10px] text-slate-500 mb-1">{stats.temp.used} / {stats.temp.total} codes</span>
+                      </div>
+                      <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${Math.min(parseFloat(tempRate), 100)}%` }} />
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* University Breakdown Tables */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-slate-700/40 text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5" /> Full Premium by University
+                </div>
+                {stats.full.byUniversity.length === 0 ? (
+                  <div className="p-4 text-center text-slate-500 text-[10px]">No redemptions found</div>
+                ) : (
+                  <div className="divide-y divide-slate-700/30">
+                    {stats.full.byUniversity.map((row) => (
+                      <div key={row.university} className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition">
+                        <span className="text-slate-200 font-semibold">{row.university}</span>
+                        <span className="font-black text-amber-400">{row.count} used</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-slate-700/40 text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5" /> Temp Premium by University
+                </div>
+                {stats.temp.byUniversity.length === 0 ? (
+                  <div className="p-4 text-center text-slate-500 text-[10px]">No redemptions found</div>
+                ) : (
+                  <div className="divide-y divide-slate-700/30">
+                    {stats.temp.byUniversity.map((row) => (
+                      <div key={row.university} className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition">
+                        <span className="text-slate-200 font-semibold">{row.university}</span>
+                        <span className="font-black text-cyan-400">{row.count} used</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-6 text-slate-500 text-xs">Unable to load stats</div>
+        )}
+      </div>
 
       {/* Code Category Selection Tabs (Full Premium vs Temporary Codes) */}
       <div className="flex items-center justify-between gap-4 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl">

@@ -1,7 +1,36 @@
 import React, { useState, useEffect } from "react";
-import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw, TrendingUp } from "lucide-react";
+import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw, TrendingUp, GraduationCap, BookOpen } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+
+// College options per university — extend as your schema grows
+const COLLEGE_MAP = {
+  TASUED: [
+    "COSIT",
+    "COSMAS",
+    "COAES",
+    "COSPED",
+    "COVSED",
+    "COHSS",
+  ],
+  LASU: [
+    "Faculty of Arts",
+    "Faculty of Education",
+    "Faculty of Engineering",
+    "Faculty of Law",
+    "Faculty of Management Sciences",
+    "Faculty of Science",
+    "Faculty of Social Sciences",
+  ],
+  BOUESTI: [
+    "Faculty of Engineering",
+    "Faculty of Environmental Sciences",
+    "Faculty of Pure & Applied Sciences",
+    "Faculty of Management Sciences",
+  ],
+};
+
+const LEVEL_OPTIONS = ["100", "200", "300", "400", "500"];
 
 export default function UsersView() {
   const [users, setUsers] = useState([]);
@@ -15,6 +44,8 @@ export default function UsersView() {
   const [search, setSearch] = useState("");
   const [university, setUniversity] = useState("");
   const [premiumFilter, setPremiumFilter] = useState("");
+  const [collegeFilter, setCollegeFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
 
   // Clear All Favourites Modal State
   const [isClearFavsModalOpen, setIsClearFavsModalOpen] = useState(false);
@@ -51,6 +82,8 @@ export default function UsersView() {
         university,
         premium: premiumFilter,
       });
+      if (collegeFilter) params.append("college", collegeFilter);
+      if (yearFilter) params.append("year", yearFilter);
 
       const res = await fetch(`${API_BASE_URL}/api/admin/users?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -71,7 +104,7 @@ export default function UsersView() {
 
   useEffect(() => {
     fetchUsers();
-  }, [page, university, premiumFilter]);
+  }, [page, university, premiumFilter, collegeFilter, yearFilter]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -256,13 +289,36 @@ export default function UsersView() {
 
           <select
             value={university}
-            onChange={(e) => { setUniversity(e.target.value); setPage(1); }}
+            onChange={(e) => { setUniversity(e.target.value); setCollegeFilter(""); setPage(1); }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Universities</option>
             <option value="TASUED">TASUED</option>
             <option value="LASU">LASU</option>
             <option value="BOUESTI">BOUESTI</option>
+          </select>
+
+          <select
+            value={collegeFilter}
+            onChange={(e) => { setCollegeFilter(e.target.value); setPage(1); }}
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            disabled={!university}
+          >
+            <option value="">{university ? "All Colleges" : "Select University First"}</option>
+            {university && (COLLEGE_MAP[university] || []).map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+
+          <select
+            value={yearFilter}
+            onChange={(e) => { setYearFilter(e.target.value); setPage(1); }}
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="">All Levels</option>
+            {LEVEL_OPTIONS.map((l) => (
+              <option key={l} value={l}>{l} Level</option>
+            ))}
           </select>
 
           <select
@@ -274,6 +330,15 @@ export default function UsersView() {
             <option value="true">Premium Users Only</option>
             <option value="false">Free Users Only</option>
           </select>
+
+          {(university || collegeFilter || yearFilter || premiumFilter) && (
+            <button
+              onClick={() => { setUniversity(""); setCollegeFilter(""); setYearFilter(""); setPremiumFilter(""); setPage(1); }}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[10px] font-bold transition"
+            >
+              <X className="w-3 h-3" /> Clear Filters
+            </button>
+          )}
         </div>
       </div>
 
