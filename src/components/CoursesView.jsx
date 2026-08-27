@@ -1,7 +1,33 @@
 import React, { useState, useEffect } from "react";
-import { BookOpen, Plus, Search, Filter, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, Plus, Search, Filter, X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+
+const UNIVERSITY_COLLEGES = {
+  TASUED: [
+    { id: "COSIT", name: "COSIT (Science & Info Tech)" },
+    { id: "COVTED", name: "COVTED (Vocational & Tech)" },
+    { id: "COSMAS", name: "COSMAS (Specialized / Social Sciences)" },
+    { id: "COHUM", name: "COHUM (Humanities)" },
+    { id: "COAEAP", name: "COAEAP (Agriculture & Env Ed)" },
+  ],
+  LASU: [
+    { id: "SCIENCE", name: "Science" },
+    { id: "ARTS", name: "Arts" },
+    { id: "EDUCATION", name: "Education" },
+    { id: "MANAGEMENT", name: "Management Sciences" },
+    { id: "SOCIAL", name: "Social Sciences" },
+    { id: "ENGINEERING", name: "Engineering" },
+    { id: "LAW", name: "Law" },
+  ],
+  BOUESTI: [
+    { id: "SCIENCE", name: "Science Education" },
+    { id: "EDUCATION", name: "Education" },
+    { id: "AGRIC", name: "Agricultural Sciences" },
+    { id: "MANAGEMENT", name: "Social & Management" },
+    { id: "TECH", name: "Technology Education" },
+  ],
+};
 
 export default function CoursesView({ onNavigateToQuestions }) {
   const [courses, setCourses] = useState([]);
@@ -23,11 +49,12 @@ export default function CoursesView({ onNavigateToQuestions }) {
     course_code: "",
     title: "",
     course_group: "general",
-    colleges: "ALL",
     level: "100",
     semester: "1",
     university: "TASUED",
   });
+  const [selectedColleges, setSelectedColleges] = useState(["ALL"]);
+  const [availableColleges, setAvailableColleges] = useState(UNIVERSITY_COLLEGES.TASUED);
 
   const [notification, setNotification] = useState(null);
 
@@ -67,6 +94,43 @@ export default function CoursesView({ onNavigateToQuestions }) {
     fetchCourses();
   }, [page, university, level, semester]);
 
+  // Update available colleges & selection when University or Group changes
+  useEffect(() => {
+    const uniColleges = UNIVERSITY_COLLEGES[formData.university] || [
+      { id: "MAIN", name: "Main College / Faculty" }
+    ];
+    setAvailableColleges(uniColleges);
+
+    if (formData.course_group === "general") {
+      setSelectedColleges(["ALL"]);
+    } else {
+      if (selectedColleges.length === 1 && selectedColleges[0] === "ALL") {
+        setSelectedColleges(uniColleges.map((c) => c.id));
+      }
+    }
+  }, [formData.university, formData.course_group]);
+
+  const toggleCollegeSelection = (collegeId) => {
+    if (formData.course_group === "general") return;
+    if (selectedColleges.includes(collegeId)) {
+      const next = selectedColleges.filter((id) => id !== "ALL" && id !== collegeId);
+      setSelectedColleges(next);
+    } else {
+      const next = [...selectedColleges.filter((id) => id !== "ALL"), collegeId];
+      setSelectedColleges(next);
+    }
+  };
+
+  const handleSelectAllColleges = () => {
+    if (formData.course_group === "general") return;
+    const allIds = availableColleges.map((c) => c.id);
+    if (selectedColleges.length === allIds.length) {
+      setSelectedColleges([]);
+    } else {
+      setSelectedColleges(allIds);
+    }
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     setPage(1);
@@ -79,14 +143,16 @@ export default function CoursesView({ onNavigateToQuestions }) {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const collegesArr = formData.colleges.split(",").map(c => c.trim()).filter(Boolean);
+      const finalColleges = formData.course_group === "general"
+        ? ["ALL"]
+        : (selectedColleges.length > 0 ? selectedColleges : ["ALL"]);
 
       const payload = {
         course_code: formData.course_code.trim().toUpperCase(),
         name: formData.course_code.trim().toUpperCase(),
         title: formData.title.trim(),
         course_group: formData.course_group,
-        colleges: collegesArr.length > 0 ? collegesArr : ["ALL"],
+        colleges: finalColleges,
         level: parseInt(formData.level, 10),
         semester: parseInt(formData.semester, 10),
         university: formData.university,
@@ -365,13 +431,53 @@ export default function CoursesView({ onNavigateToQuestions }) {
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Colleges (Comma separated e.g. COSIT, COVTED or ALL)</label>
-                <input
-                  type="text"
-                  value={formData.colleges}
-                  onChange={(e) => setFormData({ ...formData, colleges: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-400 font-semibold">
+                    Colleges for {formData.university}
+                  </label>
+                  {formData.course_group !== "general" && (
+                    <button
+                      type="button"
+                      onClick={handleSelectAllColleges}
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
+                    >
+                      {selectedColleges.length === availableColleges.length ? "Deselect All" : "Select All"}
+                    </button>
+                  )}
+                </div>
+
+                {formData.course_group === "general" ? (
+                  <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-300 text-xs flex items-center justify-between">
+                    <span>✨ <strong>General Course:</strong> Offered to ALL colleges in {formData.university}.</span>
+                    <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-md text-[10px] font-bold">ALL</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2 p-2 bg-slate-950/60 border border-slate-800 rounded-xl max-h-36 overflow-y-auto">
+                      {availableColleges.map((c) => {
+                        const isSelected = selectedColleges.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => toggleCollegeSelection(c.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                              isSelected
+                                ? "bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/20"
+                                : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200 hover:bg-slate-700"
+                            }`}
+                          >
+                            <span>{c.name || c.id}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Click the pills above to select which {formData.university} colleges offer this {formData.course_group} course.
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">

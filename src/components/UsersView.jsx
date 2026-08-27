@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
@@ -15,6 +15,10 @@ export default function UsersView() {
   const [search, setSearch] = useState("");
   const [university, setUniversity] = useState("");
   const [premiumFilter, setPremiumFilter] = useState("");
+
+  // Clear All Favourites Modal State
+  const [isClearFavsModalOpen, setIsClearFavsModalOpen] = useState(false);
+  const [isClearingFavs, setIsClearingFavs] = useState(false);
 
   // Edit Modal State
   const [selectedUser, setSelectedUser] = useState(null);
@@ -132,6 +136,31 @@ export default function UsersView() {
     }
   };
 
+  const handleConfirmClearAllFavourites = async () => {
+    setIsClearingFavs(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/clear-all-favourites`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to clear favourite courses");
+
+      setIsClearFavsModalOpen(false);
+      setNotification({ type: "success", text: "Successfully cleared favourite courses for ALL users on the platform!" });
+      setTimeout(() => setNotification(null), 5000);
+      fetchUsers();
+    } catch (err) {
+      alert(`Error clearing favourites: ${err.message}`);
+    } finally {
+      setIsClearingFavs(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 text-slate-100">
       {/* Header */}
@@ -145,6 +174,14 @@ export default function UsersView() {
             Search student profiles, grant/revoke premium access, edit academic details, and manage course access.
           </p>
         </div>
+
+        <button
+          onClick={() => setIsClearFavsModalOpen(true)}
+          className="flex items-center gap-2 px-3.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+        >
+          <HeartOff className="w-4 h-4 text-red-400" />
+          Clear All Users' Favourite Courses
+        </button>
       </div>
 
       {notification && (
@@ -411,6 +448,49 @@ export default function UsersView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Favourites Modal */}
+      {isClearFavsModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-400 border-b border-slate-800 pb-3">
+              <AlertTriangle className="w-7 h-7 shrink-0 text-red-400" />
+              <h2 className="text-base font-bold text-white">Clear All Favourite Courses</h2>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to <strong className="text-red-400">clear all favourite courses</strong> for <strong className="text-white">ALL users</strong> on the platform at once?
+            </p>
+
+            <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300 space-y-1">
+              <div className="font-bold">What this action does:</div>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-300">
+                <li>Resets <code className="bg-slate-800 px-1 rounded text-red-300">favourite_courses</code> array to empty for all student profiles.</li>
+                <li>Clears every user's saved course list from their homepage dashboard.</li>
+                <li>Records an audit log entry.</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                disabled={isClearingFavs}
+                onClick={() => setIsClearFavsModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isClearingFavs}
+                onClick={handleConfirmClearAllFavourites}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/30 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {isClearingFavs ? <RefreshCw className="w-4 h-4 animate-spin" /> : <HeartOff className="w-4 h-4" />}
+                Yes, Clear All Favourites
+              </button>
+            </div>
           </div>
         </div>
       )}

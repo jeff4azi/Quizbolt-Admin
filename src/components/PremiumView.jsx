@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert, Copy, Filter, Sparkles, Clock } from "lucide-react";
+import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert, Copy, Filter, Sparkles, Clock, Trash2 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
@@ -25,6 +25,11 @@ export default function PremiumView() {
   // Revoke All Modal
   const [isRevokeAllOpen, setIsRevokeAllOpen] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
+
+  // Delete All Codes Modal
+  const [isDeleteAllCodesOpen, setIsDeleteAllCodesOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState("active"); // 'active' (current tab) or 'both'
+  const [isDeletingCodes, setIsDeletingCodes] = useState(false);
 
   const fetchCodes = async () => {
     setLoading(true);
@@ -140,6 +145,40 @@ export default function PremiumView() {
     }
   };
 
+  const handleConfirmDeleteAllCodes = async () => {
+    setIsDeletingCodes(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const targetType = deleteTarget === "both" ? "all" : codeType;
+
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-codes/delete-all`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ type: targetType }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to delete codes");
+
+      setIsDeleteAllCodesOpen(false);
+      setNotification({
+        type: "success",
+        text: `Successfully deleted all ${targetType === "all" ? "full and temporary premium" : targetType} redemption codes!`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+      fetchCodes();
+    } catch (err) {
+      alert(`Error deleting codes: ${err.message}`);
+    } finally {
+      setIsDeletingCodes(false);
+    }
+  };
+
   const exportCodesCsv = () => {
     if (codes.length === 0) return;
     let csv = "Code,Type,Status,Used By,Created At\n";
@@ -173,8 +212,16 @@ export default function PremiumView() {
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => setIsRevokeAllOpen(true)}
+            onClick={() => setIsDeleteAllCodesOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+          >
+            <Trash2 className="w-4 h-4 text-red-400" />
+            Delete All Codes
+          </button>
+
+          <button
+            onClick={() => setIsRevokeAllOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold rounded-xl transition shadow-sm"
           >
             <ShieldAlert className="w-4 h-4 text-red-400" />
             Revoke Everyone's Premium
@@ -538,6 +585,93 @@ export default function PremiumView() {
               >
                 {isRevoking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
                 Yes, Revoke All Premium
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete All Codes Modal */}
+      {isDeleteAllCodesOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-400" />
+                Delete All Codes
+              </h2>
+              <button onClick={() => setIsDeleteAllCodesOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Select which code database table to clear. This action will permanently remove all generated codes.
+            </p>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-400">Deletion Scope</label>
+              <div className="space-y-2">
+                <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  deleteTarget === "active" ? "bg-slate-800 border-amber-500/50 text-white" : "bg-slate-950/50 border-slate-800 text-slate-400"
+                }`}>
+                  <input
+                    type="radio"
+                    name="deleteScope"
+                    value="active"
+                    checked={deleteTarget === "active"}
+                    onChange={() => setDeleteTarget("active")}
+                    className="accent-amber-500"
+                  />
+                  <div>
+                    <div className="font-bold text-xs">
+                      Delete Current Tab Codes ({codeType === "temp" ? "temp_premium_codes" : "premium_codes"})
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Clears only the {codeType === "temp" ? "temporary trial" : "full premium"} codes table.
+                    </div>
+                  </div>
+                </label>
+
+                <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  deleteTarget === "both" ? "bg-red-500/10 border-red-500/50 text-red-300" : "bg-slate-950/50 border-slate-800 text-slate-400"
+                }`}>
+                  <input
+                    type="radio"
+                    name="deleteScope"
+                    value="both"
+                    checked={deleteTarget === "both"}
+                    onChange={() => setDeleteTarget("both")}
+                    className="accent-red-500"
+                  />
+                  <div>
+                    <div className="font-bold text-xs text-red-400">
+                      Delete ALL Codes (Both Premium & Temp Tables)
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Clears both premium_codes AND temp_premium_codes tables entirely.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300">
+              ⚠️ Warning: Deleting codes will remove unused redemption keys. Already redeemed access granted to users remains active.
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                disabled={isDeletingCodes}
+                onClick={() => setIsDeleteAllCodesOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isDeletingCodes}
+                onClick={handleConfirmDeleteAllCodes}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/30 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeletingCodes ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Yes, Delete Selected Codes
               </button>
             </div>
           </div>
