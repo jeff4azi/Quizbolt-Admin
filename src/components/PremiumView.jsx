@@ -20,7 +20,6 @@ export default function PremiumView() {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [genType, setGenType] = useState("full");
   const [quantity, setQuantity] = useState("20");
-  const [prefix, setPrefix] = useState("QZ");
   const [notification, setNotification] = useState(null);
 
   // Revoke All Modal
@@ -93,7 +92,7 @@ export default function PremiumView() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ quantity: parseInt(quantity, 10), prefix, type: genType }),
+        body: JSON.stringify({ quantity: parseInt(quantity, 10), type: genType }),
       });
 
       const data = await res.json();
@@ -463,17 +462,6 @@ export default function PremiumView() {
                   <option value="full">Full Premium Code (premium_codes)</option>
                   <option value="temp">Temporary Code (temp_premium_codes)</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Code Prefix (e.g. QZ, TEMP, TASUED)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. QZ"
-                  value={prefix}
-                  onChange={(e) => setPrefix(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white uppercase focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
               </div>
 
               <div>
