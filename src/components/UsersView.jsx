@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw } from "lucide-react";
+import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw, TrendingUp } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
@@ -19,6 +19,10 @@ export default function UsersView() {
   // Clear All Favourites Modal State
   const [isClearFavsModalOpen, setIsClearFavsModalOpen] = useState(false);
   const [isClearingFavs, setIsClearingFavs] = useState(false);
+
+  // Increment Level Modal State
+  const [isIncrementLevelModalOpen, setIsIncrementLevelModalOpen] = useState(false);
+  const [isIncrementingLevel, setIsIncrementingLevel] = useState(false);
 
   // Edit Modal State
   const [selectedUser, setSelectedUser] = useState(null);
@@ -161,6 +165,34 @@ export default function UsersView() {
     }
   };
 
+  const handleConfirmIncrementLevel = async () => {
+    setIsIncrementingLevel(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/increment-levels`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to promote user levels");
+
+      setIsIncrementLevelModalOpen(false);
+      setNotification({
+        type: "success",
+        text: data.message || `Successfully promoted ${data.updatedCount} users to their next level!`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+      fetchUsers();
+    } catch (err) {
+      alert(`Error promoting levels: ${err.message}`);
+    } finally {
+      setIsIncrementingLevel(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 text-slate-100">
       {/* Header */}
@@ -175,13 +207,23 @@ export default function UsersView() {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsClearFavsModalOpen(true)}
-          className="flex items-center gap-2 px-3.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
-        >
-          <HeartOff className="w-4 h-4 text-red-400" />
-          Clear All Users' Favourite Courses
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIsIncrementLevelModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+          >
+            <TrendingUp className="w-4 h-4 text-indigo-400" />
+            Promote All Levels (+1)
+          </button>
+
+          <button
+            onClick={() => setIsClearFavsModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+          >
+            <HeartOff className="w-4 h-4 text-red-400" />
+            Clear All Users' Favourite Courses
+          </button>
+        </div>
       </div>
 
       {notification && (
@@ -489,6 +531,50 @@ export default function UsersView() {
               >
                 {isClearingFavs ? <RefreshCw className="w-4 h-4 animate-spin" /> : <HeartOff className="w-4 h-4" />}
                 Yes, Clear All Favourites
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Increment Level Modal */}
+      {isIncrementLevelModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 text-indigo-400 border-b border-slate-800 pb-3">
+              <TrendingUp className="w-7 h-7 shrink-0 text-indigo-400" />
+              <h2 className="text-base font-bold text-white">Promote All Users Level (+1)</h2>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to <strong className="text-indigo-400">promote all student levels by +1 level</strong> platform-wide?
+            </p>
+
+            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 space-y-1.5">
+              <div className="font-bold">Promotion Rules:</div>
+              <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-300">
+                <li>100 Level (100L) → <strong>200 Level (200L)</strong></li>
+                <li>200 Level (200L) → <strong>300 Level (300L)</strong></li>
+                <li>300 Level (300L) → <strong>400 Level (400L)</strong></li>
+                <li><strong className="text-amber-400">400 Level (400L):</strong> Will remain in 400L (unchanged).</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                disabled={isIncrementingLevel}
+                onClick={() => setIsIncrementLevelModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isIncrementingLevel}
+                onClick={handleConfirmIncrementLevel}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {isIncrementingLevel ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                Yes, Promote Everyone +1
               </button>
             </div>
           </div>
