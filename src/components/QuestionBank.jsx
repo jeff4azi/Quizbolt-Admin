@@ -14,10 +14,74 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Code,
+  Sparkles
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+
+const SAMPLE_IMPORT_JSON = JSON.stringify(
+  [
+    {
+      question_id: "CSC115-001",
+      course_code: "CSC115",
+      university: "TASUED",
+      type: "objective",
+      question: "Which component of the computer executes instructions and processes data?",
+      options: ["Central Processing Unit", "Hard Disk Drive", "Random Access Memory", "Power Supply"],
+      correct: "Central Processing Unit",
+      reason: "The CPU is the primary component that performs instruction fetching, decoding, and execution.",
+      difficulty: "Easy",
+      section: "Hardware Systems"
+    },
+    {
+      question_id: "CSC115-002",
+      course_code: "CSC115",
+      university: "TASUED",
+      type: "fib",
+      question: "The acronym RAM stands for __________ Access Memory.",
+      answers: [["Random", "random"]],
+      correct: "Random",
+      reason: "RAM stands for Random Access Memory, providing volatile high-speed read/write access.",
+      difficulty: "Easy",
+      section: "Memory Systems"
+    },
+    {
+      question_id: "CSC115-003",
+      course_code: "CSC115",
+      university: "TASUED",
+      type: "theory",
+      question: "Explain the main differences between primary storage and secondary storage in a computer system.",
+      model_answer: "Primary storage (RAM) is directly accessed by CPU, extremely fast, volatile, and expensive. Secondary storage (HDD/SSD) is non-volatile, permanent, larger capacity, and slower.",
+      keywords: ["volatile", "non-volatile", "speed", "CPU", "RAM", "HDD", "SSD"],
+      reason: "Primary storage is high-speed volatile memory directly connected to the processor bus.",
+      difficulty: "Medium",
+      section: "Storage Architecture"
+    },
+    {
+      question_id: "CSC115-004",
+      course_code: "CSC115",
+      university: "TASUED",
+      type: "matching",
+      question: "Match each CPU internal subunit to its primary function:",
+      match_prompt: "Link each hardware subunit to its corresponding execution role.",
+      options: ["ALU", "Control Unit", "Registers", "Cache"],
+      answers: [
+        ["ALU", "Performs arithmetic and logical operations"],
+        ["Control Unit", "Directs flow of data and instruction decoding"],
+        ["Registers", "Ultra-fast temporary storage inside CPU"],
+        ["Cache", "High-speed SRAM memory buffer between CPU and RAM"]
+      ],
+      reason: "Each internal CPU subunit manages a dedicated stage in the instruction execution cycle.",
+      difficulty: "Hard",
+      section: "CPU Architecture"
+    }
+  ],
+  null,
+  2
+);
 
 export default function QuestionBank({ initialCourseCode = "" }) {
   const [questions, setQuestions] = useState([]);
@@ -47,13 +111,14 @@ export default function QuestionBank({ initialCourseCode = "" }) {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [bulkJsonText, setBulkJsonText] = useState("");
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
 
   // Form State for Add/Edit
   const [formData, setFormData] = useState({
     question_id: "",
     course_code: initialCourseCode || "",
-    university: "BOUESTI",
+    university: "TASUED",
     type: "objective",
     question: "",
     optionA: "",
@@ -64,10 +129,21 @@ export default function QuestionBank({ initialCourseCode = "" }) {
     reason: "",
     difficulty: "Medium",
     section: "",
-    keywordsStr: "",
+    match_prompt: "",
     model_answer: "",
+    keywordsStr: "",
     answersStr: "",
   });
+
+  const handleCopyTemplate = () => {
+    navigator.clipboard.writeText(SAMPLE_IMPORT_JSON);
+    setCopiedTemplate(true);
+    setTimeout(() => setCopiedTemplate(false), 2500);
+  };
+
+  const handleLoadSampleIntoEditor = () => {
+    setBulkJsonText(SAMPLE_IMPORT_JSON);
+  };
 
   const fetchQuestions = async () => {
     setLoading(true);
@@ -142,8 +218,8 @@ export default function QuestionBank({ initialCourseCode = "" }) {
     setEditingQuestion(null);
     setFormData({
       question_id: "",
-      course_code: courseCode || "",
-      university: "BOUESTI",
+      course_code: courseCode || initialCourseCode || "",
+      university: university || "TASUED",
       type: "objective",
       question: "",
       optionA: "",
@@ -154,8 +230,9 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       reason: "",
       difficulty: "Medium",
       section: "",
-      keywordsStr: "",
+      match_prompt: "",
       model_answer: "",
+      keywordsStr: "",
       answersStr: "",
     });
     setIsEditModalOpen(true);
@@ -166,20 +243,21 @@ export default function QuestionBank({ initialCourseCode = "" }) {
     setFormData({
       question_id: q.question_id || "",
       course_code: q.course_code || "",
-      university: q.university || "BOUESTI",
+      university: q.university || "TASUED",
       type: q.type || "objective",
       question: q.question || "",
-      optionA: q.options && q.options[0] ? q.options[0] : "",
-      optionB: q.options && q.options[1] ? q.options[1] : "",
-      optionC: q.options && q.options[2] ? q.options[2] : "",
-      optionD: q.options && q.options[3] ? q.options[3] : "",
+      optionA: Array.isArray(q.options) && q.options[0] ? q.options[0] : "",
+      optionB: Array.isArray(q.options) && q.options[1] ? q.options[1] : "",
+      optionC: Array.isArray(q.options) && q.options[2] ? q.options[2] : "",
+      optionD: Array.isArray(q.options) && q.options[3] ? q.options[3] : "",
       correct: q.correct || "",
-      reason: q.reason || "",
+      reason: q.reason || q.explanation || "",
       difficulty: q.difficulty || "Medium",
       section: q.section || "",
-      keywordsStr: q.keywords ? JSON.stringify(q.keywords) : "",
+      match_prompt: q.match_prompt || "",
       model_answer: q.model_answer || "",
-      answersStr: q.answers ? JSON.stringify(q.answers) : "",
+      keywordsStr: Array.isArray(q.keywords) ? q.keywords.join(", ") : (q.keywords || ""),
+      answersStr: q.answers ? (typeof q.answers === "string" ? q.answers : JSON.stringify(q.answers)) : "",
     });
     setIsEditModalOpen(true);
   };
@@ -190,35 +268,41 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const options =
-        formData.type === "objective"
-          ? [formData.optionA, formData.optionB, formData.optionC, formData.optionD].filter(Boolean)
-          : null;
+      let options = null;
+      if (formData.type === "objective" || formData.type === "matching") {
+        const opts = [formData.optionA, formData.optionB, formData.optionC, formData.optionD].filter(Boolean);
+        if (opts.length > 0) options = opts;
+      }
 
       let keywords = null;
-      if (formData.type === "theory" && formData.keywordsStr) {
-        try { keywords = JSON.parse(formData.keywordsStr); } catch (e) {}
+      if (formData.keywordsStr && formData.keywordsStr.trim()) {
+        keywords = formData.keywordsStr.split(",").map((k) => k.trim()).filter(Boolean);
       }
 
       let answers = null;
-      if (formData.type === "fib" && formData.answersStr) {
-        try { answers = JSON.parse(formData.answersStr); } catch (e) {}
+      if (formData.answersStr && formData.answersStr.trim()) {
+        try {
+          answers = JSON.parse(formData.answersStr);
+        } catch (err) {
+          answers = formData.answersStr.split("\n").map((a) => a.trim()).filter(Boolean);
+        }
       }
 
       const payload = {
-        question_id: formData.question_id,
-        course_code: formData.course_code,
+        question_id: formData.question_id.trim(),
+        course_code: formData.course_code.trim().toUpperCase(),
         university: formData.university,
         type: formData.type,
-        question: formData.question,
+        question: formData.question.trim(),
         options,
-        correct: formData.type === "objective" ? formData.correct : null,
-        reason: formData.reason,
+        correct: formData.correct ? formData.correct.trim() : null,
+        reason: formData.reason ? formData.reason.trim() : null,
         difficulty: formData.difficulty,
-        section: formData.section,
-        keywords,
-        model_answer: formData.model_answer,
-        answers,
+        section: formData.section ? formData.section.trim() : null,
+        match_prompt: formData.type === "matching" ? (formData.match_prompt ? formData.match_prompt.trim() : null) : null,
+        keywords: formData.type === "theory" ? keywords : null,
+        model_answer: formData.type === "theory" ? (formData.model_answer ? formData.model_answer.trim() : null) : null,
+        answers: (formData.type === "fib" || formData.type === "matching") ? answers : null,
       };
 
       let res;
@@ -588,16 +672,17 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       {/* Edit Question Modal */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white">
-                {editingQuestion ? `Edit Question (${formData.question_id})` : "Add Question"}
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Edit className="w-5 h-5 text-indigo-400" />
+                {editingQuestion ? `Edit Question (${formData.question_id})` : "Add New Question"}
               </h2>
               <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleSaveQuestion} className="space-y-4 text-xs">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1 font-semibold">Question ID</label>
                   <input
@@ -627,74 +712,196 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                     onChange={(e) => setFormData({ ...formData, university: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
-                    <option value="BOUESTI">BOUESTI</option>
-                    <option value="LASU">LASU</option>
                     <option value="TASUED">TASUED</option>
+                    <option value="LASU">LASU</option>
+                    <option value="BOUESTI">BOUESTI</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Question Type</label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-indigo-300 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="objective">Objective (MCQ)</option>
+                    <option value="fib">Fill in the Blank (FIB)</option>
+                    <option value="theory">Theory / Essay</option>
+                    <option value="matching">Matching</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Difficulty</label>
+                  <select
+                    value={formData.difficulty}
+                    onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="Easy">Easy</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Hard">Hard</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Section / Topic</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Memory Architecture"
+                    value={formData.section}
+                    onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Question Text</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Question Stem / Prompt</label>
                 <textarea
                   required
                   rows={3}
+                  placeholder="Enter main question prompt..."
                   value={formData.question}
                   onChange={(e) => setFormData({ ...formData, question: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
+              {/* Dynamic Type Specific Fields */}
               {formData.type === "objective" && (
-                <div className="space-y-2 p-3 bg-slate-800/60 rounded-xl border border-slate-800">
-                  <span className="text-[11px] font-bold text-slate-300">MCQ Options</span>
+                <div className="space-y-2 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-indigo-300">
+                    <span>MCQ Options & Correct Answer</span>
+                    <span className="text-[10px] text-slate-400">Fill options and specify exact correct string</span>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Option A"
                       value={formData.optionA}
                       onChange={(e) => setFormData({ ...formData, optionA: e.target.value })}
-                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                      className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option B"
                       value={formData.optionB}
                       onChange={(e) => setFormData({ ...formData, optionB: e.target.value })}
-                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                      className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option C"
                       value={formData.optionC}
                       onChange={(e) => setFormData({ ...formData, optionC: e.target.value })}
-                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                      className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option D"
                       value={formData.optionD}
                       onChange={(e) => setFormData({ ...formData, optionD: e.target.value })}
-                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                      className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 mt-2">Correct Answer String</label>
+                    <label className="block text-slate-400 mb-1 mt-2 font-semibold">Correct Answer (Exact String or Option)</label>
                     <input
                       type="text"
-                      placeholder="Exact option string..."
+                      placeholder="e.g. Central Processing Unit or Option string"
                       value={formData.correct}
                       onChange={(e) => setFormData({ ...formData, correct: e.target.value })}
-                      className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-300 font-bold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.type === "fib" && (
+                <div className="space-y-3 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
+                  <div className="text-[11px] font-bold text-indigo-300">Fill in the Blank Answers</div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Primary Correct Answer</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Random"
+                      value={formData.correct}
+                      onChange={(e) => setFormData({ ...formData, correct: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-300 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Accepted Answer Variations (JSON Array or multi-line)</label>
+                    <textarea
+                      rows={2}
+                      placeholder='[["Random", "random"]]'
+                      value={formData.answersStr}
+                      onChange={(e) => setFormData({ ...formData, answersStr: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-950 font-mono text-xs text-emerald-400 border border-slate-700 rounded-xl"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.type === "theory" && (
+                <div className="space-y-3 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
+                  <div className="text-[11px] font-bold text-indigo-300">Theory Model Solution & Keywords</div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Model Answer / Marking Scheme</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Enter ideal answer for marking..."
+                      value={formData.model_answer}
+                      onChange={(e) => setFormData({ ...formData, model_answer: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Grading Keywords (Comma separated)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. volatile, CPU, RAM, speed"
+                      value={formData.keywordsStr}
+                      onChange={(e) => setFormData({ ...formData, keywordsStr: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-300 font-medium"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.type === "matching" && (
+                <div className="space-y-3 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
+                  <div className="text-[11px] font-bold text-indigo-300">Matching Instructions & Answer Pairs</div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Match Prompt / Instruction</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Link each hardware item to its role."
+                      value={formData.match_prompt}
+                      onChange={(e) => setFormData({ ...formData, match_prompt: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Match Pairs JSON Array (e.g. [["ALU", "Math operations"]])</label>
+                    <textarea
+                      rows={3}
+                      placeholder='[["ALU", "Arithmetic operations"], ["Cache", "Memory buffer"]]'
+                      value={formData.answersStr}
+                      onChange={(e) => setFormData({ ...formData, answersStr: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-950 font-mono text-xs text-emerald-400 border border-slate-700 rounded-xl"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Explanation / Reason</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Detailed Rationale / Explanation (`reason`)</label>
                 <textarea
                   rows={2}
+                  placeholder="Comprehensive explanation of the correct answer..."
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -705,13 +912,13 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold transition"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition shadow-lg shadow-indigo-600/30"
                 >
                   Save Question
                 </button>
@@ -724,37 +931,79 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       {/* Bulk Import Modal */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-3xl w-full p-6 space-y-4 max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Upload className="w-5 h-5 text-indigo-400" />
-                Bulk Question Import (JSON)
-              </h2>
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-indigo-400" />
+                  Bulk Question Import (All Question Types)
+                </h2>
+                <p className="text-slate-400 text-xs mt-0.5">
+                  Supports Objective (MCQ), Fill-in-Blank (FIB), Theory, and Matching formats.
+                </p>
+              </div>
               <button onClick={() => setIsBulkModalOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
-            <textarea
-              rows={10}
-              placeholder='[{"question_id": "CSC115-999", "course_code": "CSC115", "university": "BOUESTI", "type": "objective", "question": "...", "options": ["A", "B", "C", "D"], "correct": "A"}]'
-              value={bulkJsonText}
-              onChange={(e) => setBulkJsonText(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 text-emerald-400 font-mono text-xs border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-800/60 border border-slate-800 rounded-xl">
+              <div className="flex items-center gap-2 text-xs text-slate-300">
+                <Code className="w-4 h-4 text-indigo-400" />
+                <span>Need a sample template for all question types?</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleLoadSampleIntoEditor}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  Load Sample JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyTemplate}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-md"
+                >
+                  {copiedTemplate ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedTemplate ? "Copied to Clipboard!" : "Copy JSON Template"}
+                </button>
+              </div>
+            </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setIsBulkModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkImport}
-                disabled={!bulkJsonText.trim()}
-                className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl disabled:opacity-50"
-              >
-                Run Bulk Import
-              </button>
+            <div className="relative flex-1">
+              <textarea
+                rows={13}
+                placeholder={SAMPLE_IMPORT_JSON}
+                value={bulkJsonText}
+                onChange={(e) => setBulkJsonText(e.target.value)}
+                className="w-full h-full min-h-[300px] p-3.5 bg-slate-950 text-emerald-400 font-mono text-xs border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs">
+              <div className="text-slate-400">
+                {bulkJsonText.trim() ? (
+                  <span className="text-emerald-400 font-semibold">✓ Custom JSON input detected ({bulkJsonText.length} chars)</span>
+                ) : (
+                  <span>Paste JSON array above or click <strong>Load Sample JSON</strong></span>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsBulkModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkImport}
+                  disabled={!bulkJsonText.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50 transition shadow-lg shadow-indigo-600/30"
+                >
+                  Run Bulk Import
+                </button>
+              </div>
             </div>
           </div>
         </div>
