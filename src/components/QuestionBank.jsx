@@ -30,6 +30,7 @@ const SAMPLE_IMPORT_JSON = JSON.stringify(
       university: "TASUED",
       type: "objective",
       question: "Which component of the computer executes instructions and processes data?",
+      match_prompt: "Executes instructions & processes data",
       options: ["Central Processing Unit", "Hard Disk Drive", "Random Access Memory", "Power Supply"],
       correct: "Central Processing Unit",
       reason: "The CPU is the primary component that performs instruction fetching, decoding, and execution.",
@@ -42,6 +43,7 @@ const SAMPLE_IMPORT_JSON = JSON.stringify(
       university: "TASUED",
       type: "fib",
       question: "The acronym RAM stands for __________ Access Memory.",
+      match_prompt: "What RAM stands for",
       answers: [["Random", "random"]],
       correct: "Random",
       reason: "RAM stands for Random Access Memory, providing volatile high-speed read/write access.",
@@ -54,6 +56,7 @@ const SAMPLE_IMPORT_JSON = JSON.stringify(
       university: "TASUED",
       type: "theory",
       question: "Explain the main differences between primary storage and secondary storage in a computer system.",
+      match_prompt: "Primary vs Secondary storage",
       model_answer: "Primary storage (RAM) is directly accessed by CPU, extremely fast, volatile, and expensive. Secondary storage (HDD/SSD) is non-volatile, permanent, larger capacity, and slower.",
       keywords: ["volatile", "non-volatile", "speed", "CPU", "RAM", "HDD", "SSD"],
       reason: "Primary storage is high-speed volatile memory directly connected to the processor bus.",
@@ -66,7 +69,7 @@ const SAMPLE_IMPORT_JSON = JSON.stringify(
       university: "TASUED",
       type: "matching",
       question: "Match each CPU internal subunit to its primary function:",
-      match_prompt: "Link each hardware subunit to its corresponding execution role.",
+      match_prompt: "Link CPU subunits to their roles",
       options: ["ALU", "Control Unit", "Registers", "Cache"],
       answers: [
         ["ALU", "Performs arithmetic and logical operations"],
@@ -299,7 +302,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
         reason: formData.reason ? formData.reason.trim() : null,
         difficulty: formData.difficulty,
         section: formData.section ? formData.section.trim() : null,
-        match_prompt: formData.type === "matching" ? (formData.match_prompt ? formData.match_prompt.trim() : null) : null,
+        match_prompt: formData.match_prompt ? formData.match_prompt.trim() : null,
         keywords: formData.type === "theory" ? keywords : null,
         model_answer: formData.type === "theory" ? (formData.model_answer ? formData.model_answer.trim() : null) : null,
         answers: (formData.type === "fib" || formData.type === "matching") ? answers : null,
@@ -758,7 +761,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Question Stem / Prompt</label>
+                <label className="block text-slate-400 mb-1 font-semibold">Question Stem / Prompt (Full Question Text)</label>
                 <textarea
                   required
                   rows={3}
@@ -766,6 +769,22 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                   value={formData.question}
                   onChange={(e) => setFormData({ ...formData, question: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-400 font-semibold">
+                    Match Prompt (Very short version of question for Match Mode)
+                  </label>
+                  <span className="text-[10px] font-bold text-indigo-400">Used in Quick Match</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Short summary (e.g. CPU main execution role)"
+                  value={formData.match_prompt}
+                  onChange={(e) => setFormData({ ...formData, match_prompt: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-indigo-200 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
