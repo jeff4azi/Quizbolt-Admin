@@ -86,7 +86,7 @@ export default function AdminUsersView() {
   };
 
   return (
-    <div className="p-6 space-y-6 text-slate-100">
+    <div className="p-4 sm:p-6 space-y-6 text-slate-100">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -113,52 +113,54 @@ export default function AdminUsersView() {
         </div>
       )}
 
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-slate-400">Loading admin accounts...</div>
-        ) : (
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase font-semibold">
-                <th className="py-3 px-4">Admin Email</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Created Date</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {admins.map((a) => (
-                <tr key={a.id} className="hover:bg-slate-800/40 transition">
-                  <td className="py-3.5 px-4 font-bold text-white">{a.email}</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-400">{a.role || "Admin"}</td>
-                  <td className="py-3.5 px-4">
-                    {a.active ? (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-                        Deactivated
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-400">{new Date(a.created_at).toLocaleDateString()}</td>
-                  <td className="py-3.5 px-4 text-right">
-                    <button
-                      onClick={() => handleToggleActive(a.id, a.active)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                        a.active ? "bg-red-500/10 text-red-400 hover:bg-red-500/20" : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                      }`}
-                    >
-                      {a.active ? "Deactivate" : "Activate"}
-                    </button>
-                  </td>
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl">
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="p-12 text-center text-slate-400">Loading admin accounts...</div>
+          ) : (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase font-semibold">
+                  <th className="py-3 px-4">Admin Email</th>
+                  <th className="py-3 px-4">Role</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 hidden sm:table-cell">Created Date</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {admins.map((a) => (
+                  <tr key={a.id} className="hover:bg-slate-800/40 transition">
+                    <td className="py-3.5 px-4 font-bold text-white">{a.email}</td>
+                    <td className="py-3.5 px-4 font-semibold text-indigo-400">{a.role || "Admin"}</td>
+                    <td className="py-3.5 px-4">
+                      {a.active ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                          Deactivated
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-400 hidden sm:table-cell">{new Date(a.created_at).toLocaleDateString()}</td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => handleToggleActive(a.id, a.active)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                          a.active ? "bg-red-500/10 text-red-400 hover:bg-red-500/20" : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                        }`}
+                      >
+                        {a.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {isAddModalOpen && (

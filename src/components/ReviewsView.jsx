@@ -77,7 +77,7 @@ export default function ReviewsView() {
   };
 
   return (
-    <div className="p-6 space-y-6 text-slate-100">
+    <div className="p-4 sm:p-6 space-y-6 text-slate-100">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -97,7 +97,7 @@ export default function ReviewsView() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-800 pb-3">
+      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
         <button
           onClick={() => setTab("pending")}
           className={`px-4 py-2 rounded-xl font-bold text-xs transition ${

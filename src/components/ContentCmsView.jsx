@@ -88,7 +88,7 @@ export default function ContentCmsView() {
   };
 
   return (
-    <div className="p-6 space-y-6 text-slate-100">
+    <div className="p-4 sm:p-6 space-y-6 text-slate-100">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

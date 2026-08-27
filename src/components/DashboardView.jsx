@@ -51,7 +51,7 @@ export default function DashboardView({ onNavigate }) {
   const needsAttention = stats?.needsAttention || {};
 
   return (
-    <div className="p-6 space-y-6 text-slate-100">
+    <div className="p-4 sm:p-6 space-y-6 text-slate-100">
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
         <div>
@@ -74,7 +74,7 @@ export default function DashboardView({ onNavigate }) {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-md space-y-2">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">Total Profiles</span>

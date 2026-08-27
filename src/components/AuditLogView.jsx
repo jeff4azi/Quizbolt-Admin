@@ -40,7 +40,7 @@ export default function AuditLogView() {
   }, [page]);
 
   return (
-    <div className="p-6 space-y-6 text-slate-100">
+    <div className="p-4 sm:p-6 space-y-6 text-slate-100">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -105,7 +105,7 @@ export default function AuditLogView() {
         )}
 
         {/* Pagination Bar */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
           <div>
             Showing <span className="font-bold text-white">{logs.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
             <span className="font-bold text-white">{Math.min(page * limit, total)}</span> of{" "}
