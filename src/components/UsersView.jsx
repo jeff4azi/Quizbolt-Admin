@@ -119,7 +119,15 @@ export default function UsersView() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, university, premiumFilter, collegeFilter, yearFilter]);
+  }, [
+    page,
+    limit,
+    search,
+    university,
+    premiumFilter,
+    collegeFilter,
+    yearFilter,
+  ]);
 
   useEffect(() => {
     fetchUsers();
