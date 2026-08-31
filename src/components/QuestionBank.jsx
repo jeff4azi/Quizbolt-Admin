@@ -17,10 +17,11 @@ import {
   AlertCircle,
   Copy,
   Code,
-  Sparkles
+  Sparkles,
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+import { useUniversities } from "../hooks/useUniversitiesAndColleges";
 
 const SAMPLE_IMPORT_JSON = JSON.stringify(
   [
@@ -29,13 +30,20 @@ const SAMPLE_IMPORT_JSON = JSON.stringify(
       course_code: "CSC115",
       university: "TASUED",
       type: "objective",
-      question: "Which component of the computer executes instructions and processes data?",
+      question:
+        "Which component of the computer executes instructions and processes data?",
       match_prompt: "Executes instructions & processes data",
-      options: ["Central Processing Unit", "Hard Disk Drive", "Random Access Memory", "Power Supply"],
+      options: [
+        "Central Processing Unit",
+        "Hard Disk Drive",
+        "Random Access Memory",
+        "Power Supply",
+      ],
       correct: "Central Processing Unit",
-      reason: "The CPU is the primary component that performs instruction fetching, decoding, and execution.",
+      reason:
+        "The CPU is the primary component that performs instruction fetching, decoding, and execution.",
       difficulty: "Easy",
-      section: "Hardware Systems"
+      section: "Hardware Systems",
     },
     {
       question_id: "CSC115-002",
@@ -46,22 +54,34 @@ const SAMPLE_IMPORT_JSON = JSON.stringify(
       match_prompt: "What RAM stands for",
       answers: [["Random", "random"]],
       correct: "Random",
-      reason: "RAM stands for Random Access Memory, providing volatile high-speed read/write access.",
+      reason:
+        "RAM stands for Random Access Memory, providing volatile high-speed read/write access.",
       difficulty: "Easy",
-      section: "Memory Systems"
+      section: "Memory Systems",
     },
     {
       question_id: "CSC115-003",
       course_code: "CSC115",
       university: "TASUED",
       type: "theory",
-      question: "Explain the main differences between primary storage and secondary storage in a computer system.",
+      question:
+        "Explain the main differences between primary storage and secondary storage in a computer system.",
       match_prompt: "Primary vs Secondary storage",
-      model_answer: "Primary storage (RAM) is directly accessed by CPU, extremely fast, volatile, and expensive. Secondary storage (HDD/SSD) is non-volatile, permanent, larger capacity, and slower.",
-      keywords: ["volatile", "non-volatile", "speed", "CPU", "RAM", "HDD", "SSD"],
-      reason: "Primary storage is high-speed volatile memory directly connected to the processor bus.",
+      model_answer:
+        "Primary storage (RAM) is directly accessed by CPU, extremely fast, volatile, and expensive. Secondary storage (HDD/SSD) is non-volatile, permanent, larger capacity, and slower.",
+      keywords: [
+        "volatile",
+        "non-volatile",
+        "speed",
+        "CPU",
+        "RAM",
+        "HDD",
+        "SSD",
+      ],
+      reason:
+        "Primary storage is high-speed volatile memory directly connected to the processor bus.",
       difficulty: "Medium",
-      section: "Storage Architecture"
+      section: "Storage Architecture",
     },
     {
       question_id: "CSC115-004",
@@ -75,15 +95,16 @@ const SAMPLE_IMPORT_JSON = JSON.stringify(
         ["ALU", "Performs arithmetic and logical operations"],
         ["Control Unit", "Directs flow of data and instruction decoding"],
         ["Registers", "Ultra-fast temporary storage inside CPU"],
-        ["Cache", "High-speed SRAM memory buffer between CPU and RAM"]
+        ["Cache", "High-speed SRAM memory buffer between CPU and RAM"],
       ],
-      reason: "Each internal CPU subunit manages a dedicated stage in the instruction execution cycle.",
+      reason:
+        "Each internal CPU subunit manages a dedicated stage in the instruction execution cycle.",
       difficulty: "Hard",
-      section: "CPU Architecture"
-    }
+      section: "CPU Architecture",
+    },
   ],
   null,
-  2
+  2,
 );
 
 export default function QuestionBank({ initialCourseCode = "" }) {
@@ -93,6 +114,9 @@ export default function QuestionBank({ initialCourseCode = "" }) {
   const [page, setPage] = useState(1);
   const [limit] = useState(15);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Real universities from Supabase (no more hardcoded list)
+  const { universities } = useUniversities();
 
   // Filters
   const [search, setSearch] = useState("");
@@ -121,7 +145,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
   const [formData, setFormData] = useState({
     question_id: "",
     course_code: initialCourseCode || "",
-    university: "TASUED",
+    university: "",
     type: "objective",
     question: "",
     optionA: "",
@@ -151,9 +175,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
   const fetchQuestions = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("questions")
-        .select("*", { count: "exact" });
+      let query = supabase.from("questions").select("*", { count: "exact" });
 
       if (university) query = query.ilike("university", university.trim());
       if (courseCode) query = query.ilike("course_code", courseCode.trim());
@@ -187,10 +209,21 @@ export default function QuestionBank({ initialCourseCode = "" }) {
 
   const fetchStats = async () => {
     try {
-      const { count: totalC } = await supabase.from("questions").select("*", { count: "exact", head: true });
-      const { count: objC } = await supabase.from("questions").select("*", { count: "exact", head: true }).eq("type", "objective");
-      const { count: thC } = await supabase.from("questions").select("*", { count: "exact", head: true }).eq("type", "theory");
-      const { count: fibC } = await supabase.from("questions").select("*", { count: "exact", head: true }).eq("type", "fib");
+      const { count: totalC } = await supabase
+        .from("questions")
+        .select("*", { count: "exact", head: true });
+      const { count: objC } = await supabase
+        .from("questions")
+        .select("*", { count: "exact", head: true })
+        .eq("type", "objective");
+      const { count: thC } = await supabase
+        .from("questions")
+        .select("*", { count: "exact", head: true })
+        .eq("type", "theory");
+      const { count: fibC } = await supabase
+        .from("questions")
+        .select("*", { count: "exact", head: true })
+        .eq("type", "fib");
 
       setStats({
         total: totalC || 0,
@@ -222,7 +255,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
     setFormData({
       question_id: "",
       course_code: courseCode || initialCourseCode || "",
-      university: university || "TASUED",
+      university: university || "",
       type: "objective",
       question: "",
       optionA: "",
@@ -246,7 +279,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
     setFormData({
       question_id: q.question_id || "",
       course_code: q.course_code || "",
-      university: q.university || "TASUED",
+      university: q.university || "",
       type: q.type || "objective",
       question: q.question || "",
       optionA: Array.isArray(q.options) && q.options[0] ? q.options[0] : "",
@@ -259,8 +292,14 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       section: q.section || "",
       match_prompt: q.match_prompt || "",
       model_answer: q.model_answer || "",
-      keywordsStr: Array.isArray(q.keywords) ? q.keywords.join(", ") : (q.keywords || ""),
-      answersStr: q.answers ? (typeof q.answers === "string" ? q.answers : JSON.stringify(q.answers)) : "",
+      keywordsStr: Array.isArray(q.keywords)
+        ? q.keywords.join(", ")
+        : q.keywords || "",
+      answersStr: q.answers
+        ? typeof q.answers === "string"
+          ? q.answers
+          : JSON.stringify(q.answers)
+        : "",
     });
     setIsEditModalOpen(true);
   };
@@ -273,13 +312,21 @@ export default function QuestionBank({ initialCourseCode = "" }) {
 
       let options = null;
       if (formData.type === "objective" || formData.type === "matching") {
-        const opts = [formData.optionA, formData.optionB, formData.optionC, formData.optionD].filter(Boolean);
+        const opts = [
+          formData.optionA,
+          formData.optionB,
+          formData.optionC,
+          formData.optionD,
+        ].filter(Boolean);
         if (opts.length > 0) options = opts;
       }
 
       let keywords = null;
       if (formData.keywordsStr && formData.keywordsStr.trim()) {
-        keywords = formData.keywordsStr.split(",").map((k) => k.trim()).filter(Boolean);
+        keywords = formData.keywordsStr
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean);
       }
 
       let answers = null;
@@ -287,7 +334,10 @@ export default function QuestionBank({ initialCourseCode = "" }) {
         try {
           answers = JSON.parse(formData.answersStr);
         } catch (err) {
-          answers = formData.answersStr.split("\n").map((a) => a.trim()).filter(Boolean);
+          answers = formData.answersStr
+            .split("\n")
+            .map((a) => a.trim())
+            .filter(Boolean);
         }
       }
 
@@ -302,22 +352,35 @@ export default function QuestionBank({ initialCourseCode = "" }) {
         reason: formData.reason ? formData.reason.trim() : null,
         difficulty: formData.difficulty,
         section: formData.section ? formData.section.trim() : null,
-        match_prompt: formData.match_prompt ? formData.match_prompt.trim() : null,
+        match_prompt: formData.match_prompt
+          ? formData.match_prompt.trim()
+          : null,
         keywords: formData.type === "theory" ? keywords : null,
-        model_answer: formData.type === "theory" ? (formData.model_answer ? formData.model_answer.trim() : null) : null,
-        answers: (formData.type === "fib" || formData.type === "matching") ? answers : null,
+        model_answer:
+          formData.type === "theory"
+            ? formData.model_answer
+              ? formData.model_answer.trim()
+              : null
+            : null,
+        answers:
+          formData.type === "fib" || formData.type === "matching"
+            ? answers
+            : null,
       };
 
       let res;
       if (editingQuestion) {
-        res = await fetch(`${API_BASE_URL}/api/admin/questions/${editingQuestion.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+        res = await fetch(
+          `${API_BASE_URL}/api/admin/questions/${editingQuestion.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
           },
-          body: JSON.stringify(payload),
-        });
+        );
       } else {
         res = await fetch(`${API_BASE_URL}/api/admin/questions`, {
           method: "POST",
@@ -332,7 +395,10 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       if (!res.ok) throw new Error("Failed to save question");
 
       setIsEditModalOpen(false);
-      setActionMessage({ type: "success", text: `Question ${editingQuestion ? "updated" : "created"} successfully!` });
+      setActionMessage({
+        type: "success",
+        text: `Question ${editingQuestion ? "updated" : "created"} successfully!`,
+      });
       setTimeout(() => setActionMessage(null), 4000);
       fetchQuestions();
       fetchStats();
@@ -342,7 +408,10 @@ export default function QuestionBank({ initialCourseCode = "" }) {
   };
 
   const handleDeleteQuestion = async (id, questionId) => {
-    if (!window.confirm(`Are you sure you want to delete question ${questionId}?`)) return;
+    if (
+      !window.confirm(`Are you sure you want to delete question ${questionId}?`)
+    )
+      return;
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
@@ -353,7 +422,10 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       });
       if (!res.ok) throw new Error("Failed to delete question");
 
-      setActionMessage({ type: "success", text: `Question ${questionId} deleted successfully.` });
+      setActionMessage({
+        type: "success",
+        text: `Question ${questionId} deleted successfully.`,
+      });
       setTimeout(() => setActionMessage(null), 4000);
       fetchQuestions();
       fetchStats();
@@ -370,21 +442,27 @@ export default function QuestionBank({ initialCourseCode = "" }) {
       const parsed = JSON.parse(bulkJsonText);
       const questionsArray = Array.isArray(parsed) ? parsed : [parsed];
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/questions/bulk-import`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/questions/bulk-import`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ questions: questionsArray }),
         },
-        body: JSON.stringify({ questions: questionsArray }),
-      });
+      );
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Bulk import failed");
 
       setIsBulkModalOpen(false);
       setBulkJsonText("");
-      setActionMessage({ type: "success", text: `Imported ${data.importedCount} questions successfully!` });
+      setActionMessage({
+        type: "success",
+        text: `Imported ${data.importedCount} questions successfully!`,
+      });
       setTimeout(() => setActionMessage(null), 4000);
       fetchQuestions();
       fetchStats();
@@ -403,7 +481,8 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             Question Bank Repository
           </h1>
           <p className="text-slate-400 text-xs mt-1">
-            Manage 13,800+ objective, theory, and fill-in-blank questions stored in Supabase Postgres DB.
+            Manage 13,800+ objective, theory, and fill-in-blank questions stored
+            in Supabase Postgres DB.
           </p>
         </div>
 
@@ -432,7 +511,9 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             <Check className="w-4 h-4 text-emerald-400" />
             <span>{actionMessage.text}</span>
           </div>
-          <button onClick={() => setActionMessage(null)}><X className="w-4 h-4" /></button>
+          <button onClick={() => setActionMessage(null)}>
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -443,8 +524,12 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             <BookOpen className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Questions</div>
-            <div className="text-xl font-black text-white">{stats.total.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Total Questions
+            </div>
+            <div className="text-xl font-black text-white">
+              {stats.total.toLocaleString()}
+            </div>
           </div>
         </div>
 
@@ -453,8 +538,12 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             <HelpCircle className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Objective (MCQ)</div>
-            <div className="text-xl font-black text-white">{stats.objective.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Objective (MCQ)
+            </div>
+            <div className="text-xl font-black text-white">
+              {stats.objective.toLocaleString()}
+            </div>
           </div>
         </div>
 
@@ -463,8 +552,12 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             <FileText className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Theory</div>
-            <div className="text-xl font-black text-white">{stats.theory.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Theory
+            </div>
+            <div className="text-xl font-black text-white">
+              {stats.theory.toLocaleString()}
+            </div>
           </div>
         </div>
 
@@ -473,8 +566,12 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             <Check className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fill-in-Blank</div>
-            <div className="text-xl font-black text-white">{stats.fib.toLocaleString()}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Fill-in-Blank
+            </div>
+            <div className="text-xl font-black text-white">
+              {stats.fib.toLocaleString()}
+            </div>
           </div>
         </div>
       </div>
@@ -493,28 +590,41 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             />
           </div>
 
-          <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition">
+          <button
+            type="submit"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition"
+          >
             Search
           </button>
         </form>
 
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80 text-xs">
-          <span className="text-slate-500 font-semibold flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Filter:</span>
+          <span className="text-slate-500 font-semibold flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5" /> Filter:
+          </span>
 
           <select
             value={university}
-            onChange={(e) => { setUniversity(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setUniversity(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Universities</option>
-            <option value="BOUESTI">BOUESTI</option>
-            <option value="LASU">LASU</option>
-            <option value="TASUED">TASUED</option>
+            {universities.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name || u.id}
+              </option>
+            ))}
           </select>
 
           <select
             value={type}
-            onChange={(e) => { setType(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setType(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Types</option>
@@ -525,7 +635,10 @@ export default function QuestionBank({ initialCourseCode = "" }) {
 
           <select
             value={difficulty}
-            onChange={(e) => { setDifficulty(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setDifficulty(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Difficulties</option>
@@ -538,14 +651,22 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             type="text"
             placeholder="Course (e.g. CSC115)..."
             value={courseCode}
-            onChange={(e) => { setCourseCode(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setCourseCode(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-44"
           />
 
           {(university || type || difficulty || courseCode || search) && (
             <button
               onClick={() => {
-                setUniversity(""); setType(""); setDifficulty(""); setCourseCode(""); setSearch(""); setPage(1);
+                setUniversity("");
+                setType("");
+                setDifficulty("");
+                setCourseCode("");
+                setSearch("");
+                setPage(1);
               }}
               className="text-indigo-400 hover:text-indigo-300 font-semibold underline ml-auto"
             >
@@ -585,37 +706,62 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                 {questions.map((q) => (
                   <tr key={q.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-indigo-400">{q.course_code}</div>
-                      <div className="text-[11px] text-slate-500">{q.question_id}</div>
+                      <div className="font-bold text-indigo-400">
+                        {q.course_code}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {q.question_id}
+                      </div>
                     </td>
 
-                    <td className="py-3.5 px-4 font-semibold text-slate-300">{q.university}</td>
+                    <td className="py-3.5 px-4 font-semibold text-slate-300">
+                      {q.university}
+                    </td>
 
                     <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                        q.type === "objective"
-                          ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                          : q.type === "theory"
-                          ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                          : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                      }`}>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                          q.type === "objective"
+                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                            : q.type === "theory"
+                              ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        }`}
+                      >
                         {q.type}
                       </span>
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-200">
-                      <div className="line-clamp-2 font-medium">{q.question}</div>
+                      <div className="line-clamp-2 font-medium">
+                        {q.question}
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-400">
                       {q.type === "objective" && (
-                        <div className="line-clamp-2"><span className="text-emerald-400 font-bold">Ans:</span> {q.correct}</div>
+                        <div className="line-clamp-2">
+                          <span className="text-emerald-400 font-bold">
+                            Ans:
+                          </span>{" "}
+                          {q.correct}
+                        </div>
                       )}
                       {q.type === "theory" && (
-                        <div className="line-clamp-2"><span className="text-purple-400 font-bold">Ans:</span> {q.model_answer || "Keywords set"}</div>
+                        <div className="line-clamp-2">
+                          <span className="text-purple-400 font-bold">
+                            Ans:
+                          </span>{" "}
+                          {q.model_answer || "Keywords set"}
+                        </div>
                       )}
                       {q.type === "fib" && (
-                        <div className="line-clamp-2"><span className="text-emerald-400 font-bold">Ans:</span> {q.answers ? JSON.stringify(q.answers) : "-"}</div>
+                        <div className="line-clamp-2">
+                          <span className="text-emerald-400 font-bold">
+                            Ans:
+                          </span>{" "}
+                          {q.answers ? JSON.stringify(q.answers) : "-"}
+                        </div>
                       )}
                     </td>
 
@@ -629,7 +775,9 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteQuestion(q.id, q.question_id)}
+                          onClick={() =>
+                            handleDeleteQuestion(q.id, q.question_id)
+                          }
                           className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
                           title="Delete Question"
                         >
@@ -647,9 +795,19 @@ export default function QuestionBank({ initialCourseCode = "" }) {
         {/* Pagination Bar */}
         <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <div>
-            Showing <span className="font-bold text-white">{questions.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
-            <span className="font-bold text-white">{Math.min(page * limit, total)}</span> of{" "}
-            <span className="font-bold text-white">{total.toLocaleString()}</span> questions
+            Showing{" "}
+            <span className="font-bold text-white">
+              {questions.length > 0 ? (page - 1) * limit + 1 : 0}
+            </span>{" "}
+            to{" "}
+            <span className="font-bold text-white">
+              {Math.min(page * limit, total)}
+            </span>{" "}
+            of{" "}
+            <span className="font-bold text-white">
+              {total.toLocaleString()}
+            </span>{" "}
+            questions
           </div>
 
           <div className="flex items-center gap-2">
@@ -660,7 +818,9 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             >
               <ChevronLeft className="w-4 h-4" /> Prev
             </button>
-            <span className="font-semibold text-slate-300 px-2">Page {page} of {totalPages}</span>
+            <span className="font-semibold text-slate-300 px-2">
+              Page {page} of {totalPages}
+            </span>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
@@ -679,53 +839,82 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <Edit className="w-5 h-5 text-indigo-400" />
-                {editingQuestion ? `Edit Question (${formData.question_id})` : "Add New Question"}
+                {editingQuestion
+                  ? `Edit Question (${formData.question_id})`
+                  : "Add New Question"}
               </h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <form onSubmit={handleSaveQuestion} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Question ID</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Question ID
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="CSC115-001"
                     value={formData.question_id}
-                    onChange={(e) => setFormData({ ...formData, question_id: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, question_id: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Course Code</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Course Code
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="CSC115"
                     value={formData.course_code}
-                    onChange={(e) => setFormData({ ...formData, course_code: e.target.value.toUpperCase() })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        course_code: e.target.value.toUpperCase(),
+                      })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white uppercase focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">University</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    University
+                  </label>
                   <select
                     value={formData.university}
-                    onChange={(e) => setFormData({ ...formData, university: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, university: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
-                    <option value="TASUED">TASUED</option>
-                    <option value="LASU">LASU</option>
-                    <option value="BOUESTI">BOUESTI</option>
+                    <option value="">Select University</option>
+                    {universities.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name || u.id}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Question Type</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Question Type
+                  </label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, type: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-indigo-300 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="objective">Objective (MCQ)</option>
@@ -736,10 +925,14 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Difficulty</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Difficulty
+                  </label>
                   <select
                     value={formData.difficulty}
-                    onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, difficulty: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="Easy">Easy</option>
@@ -749,25 +942,33 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Section / Topic</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Section / Topic
+                  </label>
                   <input
                     type="text"
                     placeholder="e.g. Memory Architecture"
                     value={formData.section}
-                    onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, section: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Question Stem / Prompt (Full Question Text)</label>
+                <label className="block text-slate-400 mb-1 font-semibold">
+                  Question Stem / Prompt (Full Question Text)
+                </label>
                 <textarea
                   required
                   rows={3}
                   placeholder="Enter main question prompt..."
                   value={formData.question}
-                  onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, question: e.target.value })
+                  }
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -777,13 +978,17 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                   <label className="block text-slate-400 font-semibold">
                     Match Prompt (Very short version of question for Match Mode)
                   </label>
-                  <span className="text-[10px] font-bold text-indigo-400">Used in Quick Match</span>
+                  <span className="text-[10px] font-bold text-indigo-400">
+                    Used in Quick Match
+                  </span>
                 </div>
                 <input
                   type="text"
                   placeholder="Short summary (e.g. CPU main execution role)"
                   value={formData.match_prompt}
-                  onChange={(e) => setFormData({ ...formData, match_prompt: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, match_prompt: e.target.value })
+                  }
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-indigo-200 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -793,45 +998,59 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                 <div className="space-y-2 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
                   <div className="flex items-center justify-between text-[11px] font-bold text-indigo-300">
                     <span>MCQ Options & Correct Answer</span>
-                    <span className="text-[10px] text-slate-400">Fill options and specify exact correct string</span>
+                    <span className="text-[10px] text-slate-400">
+                      Fill options and specify exact correct string
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Option A"
                       value={formData.optionA}
-                      onChange={(e) => setFormData({ ...formData, optionA: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, optionA: e.target.value })
+                      }
                       className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option B"
                       value={formData.optionB}
-                      onChange={(e) => setFormData({ ...formData, optionB: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, optionB: e.target.value })
+                      }
                       className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option C"
                       value={formData.optionC}
-                      onChange={(e) => setFormData({ ...formData, optionC: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, optionC: e.target.value })
+                      }
                       className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                     <input
                       type="text"
                       placeholder="Option D"
                       value={formData.optionD}
-                      onChange={(e) => setFormData({ ...formData, optionD: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, optionD: e.target.value })
+                      }
                       className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 mt-2 font-semibold">Correct Answer (Exact String or Option)</label>
+                    <label className="block text-slate-400 mb-1 mt-2 font-semibold">
+                      Correct Answer (Exact String or Option)
+                    </label>
                     <input
                       type="text"
                       placeholder="e.g. Central Processing Unit or Option string"
                       value={formData.correct}
-                      onChange={(e) => setFormData({ ...formData, correct: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, correct: e.target.value })
+                      }
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-300 font-bold"
                     />
                   </div>
@@ -840,24 +1059,34 @@ export default function QuestionBank({ initialCourseCode = "" }) {
 
               {formData.type === "fib" && (
                 <div className="space-y-3 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
-                  <div className="text-[11px] font-bold text-indigo-300">Fill in the Blank Answers</div>
+                  <div className="text-[11px] font-bold text-indigo-300">
+                    Fill in the Blank Answers
+                  </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-semibold">Primary Correct Answer</label>
+                    <label className="block text-slate-400 mb-1 font-semibold">
+                      Primary Correct Answer
+                    </label>
                     <input
                       type="text"
                       placeholder="e.g. Random"
                       value={formData.correct}
-                      onChange={(e) => setFormData({ ...formData, correct: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, correct: e.target.value })
+                      }
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-300 font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-semibold">Accepted Answer Variations (JSON Array or multi-line)</label>
+                    <label className="block text-slate-400 mb-1 font-semibold">
+                      Accepted Answer Variations (JSON Array or multi-line)
+                    </label>
                     <textarea
                       rows={2}
                       placeholder='[["Random", "random"]]'
                       value={formData.answersStr}
-                      onChange={(e) => setFormData({ ...formData, answersStr: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, answersStr: e.target.value })
+                      }
                       className="w-full px-3 py-2 bg-slate-950 font-mono text-xs text-emerald-400 border border-slate-700 rounded-xl"
                     />
                   </div>
@@ -866,24 +1095,40 @@ export default function QuestionBank({ initialCourseCode = "" }) {
 
               {formData.type === "theory" && (
                 <div className="space-y-3 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
-                  <div className="text-[11px] font-bold text-indigo-300">Theory Model Solution & Keywords</div>
+                  <div className="text-[11px] font-bold text-indigo-300">
+                    Theory Model Solution & Keywords
+                  </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-semibold">Model Answer / Marking Scheme</label>
+                    <label className="block text-slate-400 mb-1 font-semibold">
+                      Model Answer / Marking Scheme
+                    </label>
                     <textarea
                       rows={3}
                       placeholder="Enter ideal answer for marking..."
                       value={formData.model_answer}
-                      onChange={(e) => setFormData({ ...formData, model_answer: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          model_answer: e.target.value,
+                        })
+                      }
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-semibold">Grading Keywords (Comma separated)</label>
+                    <label className="block text-slate-400 mb-1 font-semibold">
+                      Grading Keywords (Comma separated)
+                    </label>
                     <input
                       type="text"
                       placeholder="e.g. volatile, CPU, RAM, speed"
                       value={formData.keywordsStr}
-                      onChange={(e) => setFormData({ ...formData, keywordsStr: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          keywordsStr: e.target.value,
+                        })
+                      }
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-300 font-medium"
                     />
                   </div>
@@ -892,24 +1137,37 @@ export default function QuestionBank({ initialCourseCode = "" }) {
 
               {formData.type === "matching" && (
                 <div className="space-y-3 p-3.5 bg-slate-800/60 rounded-xl border border-slate-800">
-                  <div className="text-[11px] font-bold text-indigo-300">Matching Instructions & Answer Pairs</div>
+                  <div className="text-[11px] font-bold text-indigo-300">
+                    Matching Instructions & Answer Pairs
+                  </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-semibold">Match Prompt / Instruction</label>
+                    <label className="block text-slate-400 mb-1 font-semibold">
+                      Match Prompt / Instruction
+                    </label>
                     <input
                       type="text"
                       placeholder="e.g. Link each hardware item to its role."
                       value={formData.match_prompt}
-                      onChange={(e) => setFormData({ ...formData, match_prompt: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          match_prompt: e.target.value,
+                        })
+                      }
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1 font-semibold">Match Pairs JSON Array (e.g. [["ALU", "Math operations"]])</label>
+                    <label className="block text-slate-400 mb-1 font-semibold">
+                      Match Pairs JSON Array (e.g. [["ALU", "Math operations"]])
+                    </label>
                     <textarea
                       rows={3}
                       placeholder='[["ALU", "Arithmetic operations"], ["Cache", "Memory buffer"]]'
                       value={formData.answersStr}
-                      onChange={(e) => setFormData({ ...formData, answersStr: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, answersStr: e.target.value })
+                      }
                       className="w-full px-3 py-2 bg-slate-950 font-mono text-xs text-emerald-400 border border-slate-700 rounded-xl"
                     />
                   </div>
@@ -917,12 +1175,16 @@ export default function QuestionBank({ initialCourseCode = "" }) {
               )}
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Detailed Rationale / Explanation (`reason`)</label>
+                <label className="block text-slate-400 mb-1 font-semibold">
+                  Detailed Rationale / Explanation (`reason`)
+                </label>
                 <textarea
                   rows={2}
                   placeholder="Comprehensive explanation of the correct answer..."
                   value={formData.reason}
-                  onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, reason: e.target.value })
+                  }
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -958,10 +1220,16 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                   Bulk Question Import (All Question Types)
                 </h2>
                 <p className="text-slate-400 text-xs mt-0.5">
-                  Supports Objective (MCQ), Fill-in-Blank (FIB), Theory, and Matching formats.
+                  Supports Objective (MCQ), Fill-in-Blank (FIB), Theory, and
+                  Matching formats.
                 </p>
               </div>
-              <button onClick={() => setIsBulkModalOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
+              <button
+                onClick={() => setIsBulkModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-800/60 border border-slate-800 rounded-xl">
@@ -983,8 +1251,14 @@ export default function QuestionBank({ initialCourseCode = "" }) {
                   onClick={handleCopyTemplate}
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-md"
                 >
-                  {copiedTemplate ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copiedTemplate ? "Copied to Clipboard!" : "Copy JSON Template"}
+                  {copiedTemplate ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-300" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  {copiedTemplate
+                    ? "Copied to Clipboard!"
+                    : "Copy JSON Template"}
                 </button>
               </div>
             </div>
@@ -1002,9 +1276,14 @@ export default function QuestionBank({ initialCourseCode = "" }) {
             <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs">
               <div className="text-slate-400">
                 {bulkJsonText.trim() ? (
-                  <span className="text-emerald-400 font-semibold">✓ Custom JSON input detected ({bulkJsonText.length} chars)</span>
+                  <span className="text-emerald-400 font-semibold">
+                    ✓ Custom JSON input detected ({bulkJsonText.length} chars)
+                  </span>
                 ) : (
-                  <span>Paste JSON array above or click <strong>Load Sample JSON</strong></span>
+                  <span>
+                    Paste JSON array above or click{" "}
+                    <strong>Load Sample JSON</strong>
+                  </span>
                 )}
               </div>
 

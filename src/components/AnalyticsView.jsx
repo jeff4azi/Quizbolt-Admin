@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from "react";
-import { BarChart3, Download, RefreshCw, Filter, GraduationCap } from "lucide-react";
+import {
+  BarChart3,
+  Download,
+  RefreshCw,
+  Filter,
+  GraduationCap,
+} from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+import { useUniversities } from "../hooks/useUniversitiesAndColleges";
 
 export default function AnalyticsView() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [universityFilter, setUniversityFilter] = useState("");
+  const { universities } = useUniversities();
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -18,7 +26,7 @@ export default function AnalyticsView() {
       if (universityFilter) params.append("university", universityFilter);
 
       const res = await fetch(`${API_BASE_URL}/api/admin/analytics?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const result = await res.json();
@@ -59,7 +67,8 @@ export default function AnalyticsView() {
             University-Scoped Analytics & Telemetry (2.12)
           </h1>
           <p className="text-slate-400 text-xs mt-1">
-            Attempt telemetry aggregated across all database rows via PostgreSQL RPC functions (bypassing API row limits).
+            Attempt telemetry aggregated across all database rows via PostgreSQL
+            RPC functions (bypassing API row limits).
           </p>
         </div>
 
@@ -85,9 +94,11 @@ export default function AnalyticsView() {
           className="px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="">All Universities</option>
-          <option value="TASUED">TASUED</option>
-          <option value="BOUESTI">BOUESTI</option>
-          <option value="LASU">LASU</option>
+          {universities.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name || u.id}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -100,18 +111,30 @@ export default function AnalyticsView() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl">
-              <div className="text-[10px] font-bold text-slate-400 uppercase">Exam Attempts ({universityFilter || "All"})</div>
-              <div className="text-2xl font-black text-white mt-1">{(data?.totalExamAttempts || 0).toLocaleString()}</div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase">
+                Exam Attempts ({universityFilter || "All"})
+              </div>
+              <div className="text-2xl font-black text-white mt-1">
+                {(data?.totalExamAttempts || 0).toLocaleString()}
+              </div>
             </div>
 
             <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl">
-              <div className="text-[10px] font-bold text-slate-400 uppercase">Practice Attempts ({universityFilter || "All"})</div>
-              <div className="text-2xl font-black text-purple-400 mt-1">{(data?.totalTestAttempts || 0).toLocaleString()}</div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase">
+                Practice Attempts ({universityFilter || "All"})
+              </div>
+              <div className="text-2xl font-black text-purple-400 mt-1">
+                {(data?.totalTestAttempts || 0).toLocaleString()}
+              </div>
             </div>
 
             <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl">
-              <div className="text-[10px] font-bold text-slate-400 uppercase">University-Course Pairs</div>
-              <div className="text-2xl font-black text-emerald-400 mt-1">{(data?.courseStatsList?.length || 0).toLocaleString()}</div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase">
+                University-Course Pairs
+              </div>
+              <div className="text-2xl font-black text-emerald-400 mt-1">
+                {(data?.courseStatsList?.length || 0).toLocaleString()}
+              </div>
             </div>
           </div>
 
@@ -121,7 +144,9 @@ export default function AnalyticsView() {
               Course Attempt Telemetry (Grouped by Institution)
             </h2>
             {!data?.courseStatsList || data.courseStatsList.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 text-xs">No attempt telemetry recorded for this filter.</div>
+              <div className="p-8 text-center text-slate-500 text-xs">
+                No attempt telemetry recorded for this filter.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
@@ -136,12 +161,25 @@ export default function AnalyticsView() {
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {data.courseStatsList.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/40 transition">
-                        <td className="py-3.5 px-4 font-bold text-indigo-300">{item.university}</td>
-                        <td className="py-3.5 px-4 font-bold text-white">{item.course_code}</td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-200">{item.attempts.toLocaleString()}</td>
-                        <td className="py-3.5 px-4 text-purple-300 font-medium">{item.retakes.toLocaleString()}</td>
-                        <td className="py-3.5 px-4 font-bold text-emerald-400">{item.avg_score}%</td>
+                      <tr
+                        key={idx}
+                        className="hover:bg-slate-800/40 transition"
+                      >
+                        <td className="py-3.5 px-4 font-bold text-indigo-300">
+                          {item.university}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-white">
+                          {item.course_code}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold text-slate-200">
+                          {item.attempts.toLocaleString()}
+                        </td>
+                        <td className="py-3.5 px-4 text-purple-300 font-medium">
+                          {item.retakes.toLocaleString()}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-emerald-400">
+                          {item.avg_score}%
+                        </td>
                       </tr>
                     ))}
                   </tbody>

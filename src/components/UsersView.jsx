@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   Users,
@@ -22,28 +22,26 @@ import {
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+import {
+  useUniversities,
+  useColleges,
+} from "../hooks/useUniversitiesAndColleges";
 
-// College options per university — extend as your schema grows
-const COLLEGE_MAP = {
-  TASUED: ["COSIT", "COSMAS", "COAES", "COSPED", "COVSED", "COHSS"],
-  LASU: [
-    "Faculty of Arts",
-    "Faculty of Education",
-    "Faculty of Engineering",
-    "Faculty of Law",
-    "Faculty of Management Sciences",
-    "Faculty of Science",
-    "Faculty of Social Sciences",
-  ],
-  BOUESTI: [
-    "Faculty of Engineering",
-    "Faculty of Environmental Sciences",
-    "Faculty of Pure & Applied Sciences",
-    "Faculty of Management Sciences",
-  ],
+// profiles.year is a NOT NULL smallint storing 1-4 (NOT literally
+// 100/200/300/400) — there is no 400+1 "500 Level", year 4 is the final year.
+const LEVEL_OPTIONS = [
+  { value: "1", label: "100 Level" },
+  { value: "2", label: "200 Level" },
+  { value: "3", label: "300 Level" },
+  { value: "4", label: "400 Level" },
+];
+const LEVEL_LABELS = {
+  1: "100 Level",
+  2: "200 Level",
+  3: "300 Level",
+  4: "400 Level",
 };
-
-const LEVEL_OPTIONS = ["100", "200", "300", "400", "500"];
+const formatLevel = (year) => LEVEL_LABELS[Number(year)] || `Year ${year}`;
 
 export default function UsersView() {
   const [users, setUsers] = useState([]);
@@ -53,12 +51,16 @@ export default function UsersView() {
   const [limit] = useState(15);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Real universities/colleges from Supabase (no more hardcoded lists)
+  const { universities } = useUniversities();
+
   // Filters
   const [search, setSearch] = useState("");
   const [university, setUniversity] = useState("");
   const [premiumFilter, setPremiumFilter] = useState("");
   const [collegeFilter, setCollegeFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
+  const { colleges: filterColleges } = useColleges(university);
 
   // Clear All Favourites Modal State
   const [isClearFavsModalOpen, setIsClearFavsModalOpen] = useState(false);
@@ -82,13 +84,14 @@ export default function UsersView() {
     university: "",
     college: "",
     department: "",
-    year: "100",
+    year: "1",
     is_premium: false,
   });
+  const { colleges: editColleges } = useColleges(editForm.university);
 
   const [notification, setNotification] = useState(null);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = async () => {
     setLoading(true);
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -119,19 +122,11 @@ export default function UsersView() {
     } finally {
       setLoading(false);
     }
-  }, [
-    page,
-    limit,
-    search,
-    university,
-    premiumFilter,
-    collegeFilter,
-    yearFilter,
-  ]);
+  };
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
+  }, [page, university, premiumFilter, collegeFilter, yearFilter]);
 
   const fetchUndoStatus = async () => {
     try {
@@ -171,10 +166,10 @@ export default function UsersView() {
     setEditForm({
       full_name: user.full_name || "",
       user_name: user.user_name || "",
-      university: user.university || "TASUED",
+      university: user.university || "",
       college: user.college || "",
       department: user.department || "",
-      year: user.year ? String(user.year) : "100",
+      year: user.year ? String(user.year) : "1",
       is_premium: Boolean(user.is_premium),
     });
   };
@@ -433,9 +428,11 @@ export default function UsersView() {
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Universities</option>
-            <option value="TASUED">TASUED</option>
-            <option value="LASU">LASU</option>
-            <option value="BOUESTI">BOUESTI</option>
+            {universities.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name || u.id}
+              </option>
+            ))}
           </select>
 
           <select
@@ -450,12 +447,11 @@ export default function UsersView() {
             <option value="">
               {university ? "All Colleges" : "Select University First"}
             </option>
-            {university &&
-              (COLLEGE_MAP[university] || []).map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+            {filterColleges.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
 
           <select
@@ -468,8 +464,8 @@ export default function UsersView() {
           >
             <option value="">All Levels</option>
             {LEVEL_OPTIONS.map((l) => (
-              <option key={l} value={l}>
-                {l} Level
+              <option key={l.value} value={l.value}>
+                {l.label}
               </option>
             ))}
           </select>
@@ -541,13 +537,13 @@ export default function UsersView() {
                     </td>
 
                     <td className="py-3.5 px-4 font-semibold text-indigo-300">
-                      {u.university || "TASUED"}
+                      {u.university || "—"}
                     </td>
                     <td className="py-3.5 px-4 text-slate-300">
                       {u.college || "-"} / {u.department || "-"}
                     </td>
                     <td className="py-3.5 px-4 text-slate-300">
-                      {u.year ? `${u.year} L` : "100 L"}
+                      {formatLevel(u.year)}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -687,13 +683,20 @@ export default function UsersView() {
                   <select
                     value={editForm.university}
                     onChange={(e) =>
-                      setEditForm({ ...editForm, university: e.target.value })
+                      setEditForm({
+                        ...editForm,
+                        university: e.target.value,
+                        college: "",
+                      })
                     }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
-                    <option value="TASUED">TASUED</option>
-                    <option value="LASU">LASU</option>
-                    <option value="BOUESTI">BOUESTI</option>
+                    <option value="">Select University</option>
+                    {universities.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name || u.id}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -708,11 +711,11 @@ export default function UsersView() {
                     }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
-                    <option value="100">100 Level</option>
-                    <option value="200">200 Level</option>
-                    <option value="300">300 Level</option>
-                    <option value="400">400 Level</option>
-                    <option value="500">500 Level</option>
+                    {LEVEL_OPTIONS.map((l) => (
+                      <option key={l.value} value={l.value}>
+                        {l.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -722,14 +725,25 @@ export default function UsersView() {
                   <label className="block text-slate-400 mb-1 font-semibold">
                     College
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={editForm.college}
                     onChange={(e) =>
                       setEditForm({ ...editForm, college: e.target.value })
                     }
+                    disabled={!editForm.university}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
+                  >
+                    <option value="">
+                      {editForm.university
+                        ? "Select College"
+                        : "Select University First"}
+                    </option>
+                    {editColleges.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-400 mb-1 font-semibold">
