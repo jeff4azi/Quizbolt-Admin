@@ -1,24 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  Crown,
-  Key,
-  Download,
-  Plus,
-  Check,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  AlertTriangle,
-  ShieldAlert,
-  Copy,
-  Filter,
-  Sparkles,
-  Clock,
-  Trash2,
-  BarChart3,
-  GraduationCap,
-} from "lucide-react";
+import { Crown, Key, Download, Plus, Check, RefreshCw, ChevronLeft, ChevronRight, X, AlertTriangle, ShieldAlert, Copy, Filter, Sparkles, Clock, Trash2, BarChart3, GraduationCap } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 import { useUniversities } from "../hooks/useUniversitiesAndColleges";
@@ -28,12 +9,12 @@ export default function PremiumView() {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(15);
+  const [limit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
 
   // Real universities from Supabase (no more hardcoded list)
   const { universities } = useUniversities();
-
+  
   // Category tab: 'full' (Permanent) vs 'temp' (Temporary/Trial)
   const [codeType, setCodeType] = useState("full");
   const [usedFilter, setUsedFilter] = useState("all"); // 'all', 'unused', 'used'
@@ -69,12 +50,9 @@ export default function PremiumView() {
       if (usedFilter === "used") params.append("used", "true");
       if (usedFilter === "unused") params.append("used", "false");
 
-      const res = await fetch(
-        `${API_BASE_URL}/api/admin/premium-codes?${params}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-codes?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
       if (res.ok) {
         const data = await res.json();
@@ -94,15 +72,10 @@ export default function PremiumView() {
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
-      const params = uniFilter
-        ? `?university=${encodeURIComponent(uniFilter)}`
-        : "";
-      const res = await fetch(
-        `${API_BASE_URL}/api/admin/premium-codes/stats${params}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const params = uniFilter ? `?university=${encodeURIComponent(uniFilter)}` : "";
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-codes/stats${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) setStats(await res.json());
     } catch (err) {
       console.error("Error fetching code stats:", err);
@@ -111,12 +84,8 @@ export default function PremiumView() {
     }
   };
 
-  useEffect(() => {
-    fetchCodes();
-  }, [page, usedFilter, codeType]);
-  useEffect(() => {
-    fetchStats();
-  }, [uniFilter]);
+  useEffect(() => { fetchCodes(); }, [page, usedFilter, codeType]);
+  useEffect(() => { fetchStats(); }, [uniFilter]);
 
   const handleCopyCode = (codeText, id) => {
     navigator.clipboard.writeText(codeText);
@@ -125,20 +94,14 @@ export default function PremiumView() {
   };
 
   const handleCopyUnusedCodes = () => {
-    const unusedList = codes.filter((c) => !c.used).map((c) => c.code);
+    const unusedList = codes.filter(c => !c.used).map(c => c.code);
     if (unusedList.length === 0) {
-      setNotification({
-        type: "warning",
-        text: `No unused ${codeType === "temp" ? "temporary" : "full"} codes available on this page to copy.`,
-      });
+      setNotification({ type: "warning", text: `No unused ${codeType === "temp" ? "temporary" : "full"} codes available on this page to copy.` });
       setTimeout(() => setNotification(null), 3000);
       return;
     }
     navigator.clipboard.writeText(unusedList.join("\n"));
-    setNotification({
-      type: "success",
-      text: `Copied ${unusedList.length} unused ${codeType === "temp" ? "temporary" : "full"} code(s) to clipboard!`,
-    });
+    setNotification({ type: "success", text: `Copied ${unusedList.length} unused ${codeType === "temp" ? "temporary" : "full"} code(s) to clipboard!` });
     setTimeout(() => setNotification(null), 4000);
   };
 
@@ -153,20 +116,14 @@ export default function PremiumView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(
-        `${API_BASE_URL}/api/admin/premium-codes/generate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            quantity: parseInt(quantity, 10),
-            type: genType,
-          }),
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-codes/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({ quantity: parseInt(quantity, 10), type: genType }),
+      });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to generate codes");
@@ -194,23 +151,16 @@ export default function PremiumView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(
-        `${API_BASE_URL}/api/admin/premium-grants/revoke-all`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-grants/revoke-all`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.message || "Failed to revoke all premium access");
+      if (!res.ok) throw new Error(data.message || "Failed to revoke all premium access");
 
       setIsRevokeAllOpen(false);
-      setNotification({
-        type: "success",
-        text: "Successfully revoked premium access for ALL users and cleared premium_access records.",
-      });
+      setNotification({ type: "success", text: "Successfully revoked premium access for ALL users and cleared premium_access records." });
       setTimeout(() => setNotification(null), 5000);
       fetchCodes();
     } catch (err) {
@@ -228,17 +178,14 @@ export default function PremiumView() {
 
       const targetType = deleteTarget === "both" ? "all" : codeType;
 
-      const res = await fetch(
-        `${API_BASE_URL}/api/admin/premium-codes/delete-all`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ type: targetType }),
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-codes/delete-all`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({ type: targetType }),
+      });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to delete codes");
@@ -260,7 +207,7 @@ export default function PremiumView() {
   const exportCodesCsv = () => {
     if (codes.length === 0) return;
     let csv = "Code,Type,Status,Used By,Created At\n";
-    codes.forEach((c) => {
+    codes.forEach(c => {
       csv += `"${c.code}","${codeType === "temp" ? "Temporary" : "Full Premium"}","${c.used ? "Used" : "Unused"}","${c.used_by_email || "-"}","${c.created_at}"\n`;
     });
 
@@ -284,8 +231,7 @@ export default function PremiumView() {
             </h1>
           </div>
           <p className="text-slate-400 text-xs mt-1">
-            Switch between Full Premium Codes and Temporary Codes. Generate,
-            copy, export, and monitor access codes.
+            Switch between Full Premium Codes and Temporary Codes. Generate, copy, export, and monitor access codes.
           </p>
         </div>
 
@@ -335,20 +281,16 @@ export default function PremiumView() {
       </div>
 
       {notification && (
-        <div
-          className={`p-4 rounded-xl text-xs flex items-center justify-between border ${
-            notification.type === "warning"
-              ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
-              : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-          }`}
-        >
+        <div className={`p-4 rounded-xl text-xs flex items-center justify-between border ${
+          notification.type === "warning"
+            ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+        }`}>
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-400" />
             <span>{notification.text}</span>
           </div>
-          <button onClick={() => setNotification(null)}>
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={() => setNotification(null)}><X className="w-4 h-4" /></button>
         </div>
       )}
 
@@ -357,9 +299,7 @@ export default function PremiumView() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-sm font-black text-white">
-              Code Redemption Overview
-            </h2>
+            <h2 className="text-sm font-black text-white">Code Redemption Overview</h2>
           </div>
           <select
             value={uniFilter}
@@ -368,9 +308,7 @@ export default function PremiumView() {
           >
             <option value="">All Universities</option>
             {universities.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name || u.id}
-              </option>
+              <option key={u.id} value={u.id}>{u.name || u.id}</option>
             ))}
           </select>
         </div>
@@ -384,92 +322,48 @@ export default function PremiumView() {
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="p-3.5 rounded-xl border bg-amber-500/5 border-amber-500/20">
-                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                  Full — Total
-                </div>
-                <div className="text-xl font-black text-amber-400 mt-1">
-                  {stats.full.total.toLocaleString()}
-                </div>
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Full — Total</div>
+                <div className="text-xl font-black text-amber-400 mt-1">{stats.full.total.toLocaleString()}</div>
               </div>
               <div className="p-3.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
-                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                  Full — Used
-                </div>
-                <div className="text-xl font-black text-emerald-400 mt-1">
-                  {stats.full.used.toLocaleString()}
-                </div>
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Full — Used</div>
+                <div className="text-xl font-black text-emerald-400 mt-1">{stats.full.used.toLocaleString()}</div>
               </div>
               <div className="p-3.5 rounded-xl border bg-cyan-500/5 border-cyan-500/20">
-                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                  Temp — Total
-                </div>
-                <div className="text-xl font-black text-cyan-400 mt-1">
-                  {stats.temp.total.toLocaleString()}
-                </div>
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Temp — Total</div>
+                <div className="text-xl font-black text-cyan-400 mt-1">{stats.temp.total.toLocaleString()}</div>
               </div>
               <div className="p-3.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
-                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                  Temp — Used
-                </div>
-                <div className="text-xl font-black text-emerald-400 mt-1">
-                  {stats.temp.used.toLocaleString()}
-                </div>
+                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Temp — Used</div>
+                <div className="text-xl font-black text-emerald-400 mt-1">{stats.temp.used.toLocaleString()}</div>
               </div>
             </div>
 
             {/* Redemption rates */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(() => {
-                const fullRate =
-                  stats.full.total > 0
-                    ? ((stats.full.used / stats.full.total) * 100).toFixed(1)
-                    : "0.0";
-                const tempRate =
-                  stats.temp.total > 0
-                    ? ((stats.temp.used / stats.temp.total) * 100).toFixed(1)
-                    : "0.0";
+                const fullRate = stats.full.total > 0 ? ((stats.full.used / stats.full.total) * 100).toFixed(1) : "0.0";
+                const tempRate = stats.temp.total > 0 ? ((stats.temp.used / stats.temp.total) * 100).toFixed(1) : "0.0";
                 return (
                   <>
                     <div className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
-                      <div className="text-[10px] text-slate-400 font-semibold uppercase mb-2">
-                        Full Premium Redemption Rate
-                      </div>
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase mb-2">Full Premium Redemption Rate</div>
                       <div className="flex items-end gap-2">
-                        <span className="text-2xl font-black text-amber-400">
-                          {fullRate}%
-                        </span>
-                        <span className="text-[10px] text-slate-500 mb-1">
-                          {stats.full.used} / {stats.full.total} codes
-                        </span>
+                        <span className="text-2xl font-black text-amber-400">{fullRate}%</span>
+                        <span className="text-[10px] text-slate-500 mb-1">{stats.full.used} / {stats.full.total} codes</span>
                       </div>
                       <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-amber-500 rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(parseFloat(fullRate), 100)}%`,
-                          }}
-                        />
+                        <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${Math.min(parseFloat(fullRate), 100)}%` }} />
                       </div>
                     </div>
                     <div className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
-                      <div className="text-[10px] text-slate-400 font-semibold uppercase mb-2">
-                        Temp Premium Redemption Rate
-                      </div>
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase mb-2">Temp Premium Redemption Rate</div>
                       <div className="flex items-end gap-2">
-                        <span className="text-2xl font-black text-cyan-400">
-                          {tempRate}%
-                        </span>
-                        <span className="text-[10px] text-slate-500 mb-1">
-                          {stats.temp.used} / {stats.temp.total} codes
-                        </span>
+                        <span className="text-2xl font-black text-cyan-400">{tempRate}%</span>
+                        <span className="text-[10px] text-slate-500 mb-1">{stats.temp.used} / {stats.temp.total} codes</span>
                       </div>
                       <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-cyan-500 rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(parseFloat(tempRate), 100)}%`,
-                          }}
-                        />
+                        <div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${Math.min(parseFloat(tempRate), 100)}%` }} />
                       </div>
                     </div>
                   </>
@@ -481,26 +375,16 @@ export default function PremiumView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-slate-700/40 text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <GraduationCap className="w-3.5 h-3.5" /> Full Premium by
-                  University
+                  <GraduationCap className="w-3.5 h-3.5" /> Full Premium by University
                 </div>
                 {stats.full.byUniversity.length === 0 ? (
-                  <div className="p-4 text-center text-slate-500 text-[10px]">
-                    No redemptions found
-                  </div>
+                  <div className="p-4 text-center text-slate-500 text-[10px]">No redemptions found</div>
                 ) : (
                   <div className="divide-y divide-slate-700/30">
                     {stats.full.byUniversity.map((row) => (
-                      <div
-                        key={row.university}
-                        className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition"
-                      >
-                        <span className="text-slate-200 font-semibold">
-                          {row.university}
-                        </span>
-                        <span className="font-black text-amber-400">
-                          {row.count} used
-                        </span>
+                      <div key={row.university} className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition">
+                        <span className="text-slate-200 font-semibold">{row.university}</span>
+                        <span className="font-black text-amber-400">{row.count} used</span>
                       </div>
                     ))}
                   </div>
@@ -509,26 +393,16 @@ export default function PremiumView() {
 
               <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-slate-700/40 text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <GraduationCap className="w-3.5 h-3.5" /> Temp Premium by
-                  University
+                  <GraduationCap className="w-3.5 h-3.5" /> Temp Premium by University
                 </div>
                 {stats.temp.byUniversity.length === 0 ? (
-                  <div className="p-4 text-center text-slate-500 text-[10px]">
-                    No redemptions found
-                  </div>
+                  <div className="p-4 text-center text-slate-500 text-[10px]">No redemptions found</div>
                 ) : (
                   <div className="divide-y divide-slate-700/30">
                     {stats.temp.byUniversity.map((row) => (
-                      <div
-                        key={row.university}
-                        className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition"
-                      >
-                        <span className="text-slate-200 font-semibold">
-                          {row.university}
-                        </span>
-                        <span className="font-black text-cyan-400">
-                          {row.count} used
-                        </span>
+                      <div key={row.university} className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition">
+                        <span className="text-slate-200 font-semibold">{row.university}</span>
+                        <span className="font-black text-cyan-400">{row.count} used</span>
                       </div>
                     ))}
                   </div>
@@ -537,9 +411,7 @@ export default function PremiumView() {
             </div>
           </>
         ) : (
-          <div className="text-center py-6 text-slate-500 text-xs">
-            Unable to load stats
-          </div>
+          <div className="text-center py-6 text-slate-500 text-xs">Unable to load stats</div>
         )}
       </div>
 
@@ -547,10 +419,7 @@ export default function PremiumView() {
       <div className="flex items-center justify-between gap-4 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
-            onClick={() => {
-              setCodeType("full");
-              setPage(1);
-            }}
+            onClick={() => { setCodeType("full"); setPage(1); }}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition ${
               codeType === "full"
                 ? "bg-amber-500 text-slate-950 shadow-md"
@@ -562,10 +431,7 @@ export default function PremiumView() {
           </button>
 
           <button
-            onClick={() => {
-              setCodeType("temp");
-              setPage(1);
-            }}
+            onClick={() => { setCodeType("temp"); setPage(1); }}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition ${
               codeType === "temp"
                 ? "bg-cyan-500 text-slate-950 shadow-md"
@@ -579,12 +445,8 @@ export default function PremiumView() {
 
         <div className="hidden lg:block text-xs text-slate-400 pr-3">
           Currently Viewing:{" "}
-          <span
-            className={`font-bold ${codeType === "temp" ? "text-cyan-400" : "text-amber-400"}`}
-          >
-            {codeType === "temp"
-              ? "Temporary Access Codes (temp_premium_codes)"
-              : "Full Premium Codes (premium_codes)"}
+          <span className={`font-bold ${codeType === "temp" ? "text-cyan-400" : "text-amber-400"}`}>
+            {codeType === "temp" ? "Temporary Access Codes (temp_premium_codes)" : "Full Premium Codes (premium_codes)"}
           </span>
         </div>
       </div>
@@ -593,30 +455,20 @@ export default function PremiumView() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-slate-400 ml-1" />
-          <span className="text-xs text-slate-400 font-semibold">
-            Filter Usage Status:
-          </span>
+          <span className="text-xs text-slate-400 font-semibold">Filter Usage Status:</span>
           <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
-              onClick={() => {
-                setUsedFilter("all");
-                setPage(1);
-              }}
+              onClick={() => { setUsedFilter("all"); setPage(1); }}
               className={`px-3 py-1 text-xs font-bold rounded-md transition ${
                 usedFilter === "all"
-                  ? codeType === "temp"
-                    ? "bg-cyan-500 text-slate-950"
-                    : "bg-amber-500 text-slate-950"
+                  ? codeType === "temp" ? "bg-cyan-500 text-slate-950" : "bg-amber-500 text-slate-950"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
               All Codes
             </button>
             <button
-              onClick={() => {
-                setUsedFilter("unused");
-                setPage(1);
-              }}
+              onClick={() => { setUsedFilter("unused"); setPage(1); }}
               className={`px-3 py-1 text-xs font-bold rounded-md transition ${
                 usedFilter === "unused"
                   ? "bg-emerald-500 text-slate-950"
@@ -626,10 +478,7 @@ export default function PremiumView() {
               Unused Only
             </button>
             <button
-              onClick={() => {
-                setUsedFilter("used");
-                setPage(1);
-              }}
+              onClick={() => { setUsedFilter("used"); setPage(1); }}
               className={`px-3 py-1 text-xs font-bold rounded-md transition ${
                 usedFilter === "used"
                   ? "bg-red-500 text-white"
@@ -642,13 +491,8 @@ export default function PremiumView() {
         </div>
 
         <div className="text-[11px] text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-800">
-          Showing:{" "}
-          <span
-            className={`font-semibold ${codeType === "temp" ? "text-cyan-400" : "text-amber-400"}`}
-          >
-            {codeType === "temp"
-              ? "Temporary Trial Codes"
-              : "Full Premium Codes"}
+          Showing: <span className={`font-semibold ${codeType === "temp" ? "text-cyan-400" : "text-amber-400"}`}>
+            {codeType === "temp" ? "Temporary Trial Codes" : "Full Premium Codes"}
           </span>
         </div>
       </div>
@@ -656,13 +500,10 @@ export default function PremiumView() {
       {/* Codes Table */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-slate-400">
-            Loading {codeType === "temp" ? "temporary" : "premium"} codes...
-          </div>
+          <div className="p-12 text-center text-slate-400">Loading {codeType === "temp" ? "temporary" : "premium"} codes...</div>
         ) : codes.length === 0 ? (
           <div className="p-12 text-center text-slate-500 text-xs">
-            No {codeType === "temp" ? "temporary" : "premium"} codes found.
-            Generate some above.
+            No {codeType === "temp" ? "temporary" : "premium"} codes found. Generate some above.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -681,11 +522,9 @@ export default function PremiumView() {
               <tbody className="divide-y divide-slate-800/60">
                 {codes.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-800/40 transition">
-                    <td
-                      className={`py-3.5 px-4 font-mono font-bold tracking-wider text-sm ${
-                        codeType === "temp" ? "text-cyan-400" : "text-amber-400"
-                      }`}
-                    >
+                    <td className={`py-3.5 px-4 font-mono font-bold tracking-wider text-sm ${
+                      codeType === "temp" ? "text-cyan-400" : "text-amber-400"
+                    }`}>
                       <div className="flex items-center gap-2">
                         <span>{c.code}</span>
                         <button
@@ -731,15 +570,11 @@ export default function PremiumView() {
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-400">
-                      {c.used_at
-                        ? new Date(c.used_at).toLocaleDateString()
-                        : "-"}
+                      {c.used_at ? new Date(c.used_at).toLocaleDateString() : "-"}
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-400">
-                      {c.created_at
-                        ? new Date(c.created_at).toLocaleDateString()
-                        : "-"}
+                      {c.created_at ? new Date(c.created_at).toLocaleDateString() : "-"}
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
@@ -753,8 +588,7 @@ export default function PremiumView() {
                       >
                         {copiedCodeId === c.id ? (
                           <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />{" "}
-                            Copied!
+                            <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied!
                           </>
                         ) : (
                           <>
@@ -773,19 +607,9 @@ export default function PremiumView() {
         {/* Pagination Bar */}
         <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <div>
-            Showing{" "}
-            <span className="font-bold text-white">
-              {codes.length > 0 ? (page - 1) * limit + 1 : 0}
-            </span>{" "}
-            to{" "}
-            <span className="font-bold text-white">
-              {Math.min(page * limit, total)}
-            </span>{" "}
-            of{" "}
-            <span className="font-bold text-white">
-              {total.toLocaleString()}
-            </span>{" "}
-            {codeType === "temp" ? "temporary" : "full premium"} codes
+            Showing <span className="font-bold text-white">{codes.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
+            <span className="font-bold text-white">{Math.min(page * limit, total)}</span> of{" "}
+            <span className="font-bold text-white">{total.toLocaleString()}</span> {codeType === "temp" ? "temporary" : "full premium"} codes
           </div>
 
           <div className="flex items-center gap-2">
@@ -796,9 +620,7 @@ export default function PremiumView() {
             >
               <ChevronLeft className="w-4 h-4" /> Prev
             </button>
-            <span className="font-semibold text-slate-300 px-2">
-              Page {page} of {totalPages}
-            </span>
+            <span className="font-semibold text-slate-300 px-2">Page {page} of {totalPages}</span>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
@@ -819,37 +641,24 @@ export default function PremiumView() {
                 <Crown className="w-5 h-5 text-amber-400" />
                 Generate Codes
               </h2>
-              <button
-                onClick={() => setIsGeneratorOpen(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setIsGeneratorOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleGenerateCodes} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  Code Category
-                </label>
+                <label className="block text-slate-400 mb-1 font-semibold">Code Category</label>
                 <select
                   value={genType}
                   onChange={(e) => setGenType(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
-                  <option value="full">
-                    Full Premium Code (premium_codes)
-                  </option>
-                  <option value="temp">
-                    Temporary Code (temp_premium_codes)
-                  </option>
+                  <option value="full">Full Premium Code (premium_codes)</option>
+                  <option value="temp">Temporary Code (temp_premium_codes)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  Quantity to Generate (Max 500)
-                </label>
+                <label className="block text-slate-400 mb-1 font-semibold">Quantity to Generate (Max 500)</label>
                 <input
                   type="number"
                   min="1"
@@ -862,11 +671,7 @@ export default function PremiumView() {
               </div>
 
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-[11px]">
-                Note: Generated codes will be saved in the{" "}
-                <code className="bg-slate-800 px-1 py-0.5 rounded font-mono">
-                  {genType === "temp" ? "temp_premium_codes" : "premium_codes"}
-                </code>{" "}
-                table.
+                Note: Generated codes will be saved in the <code className="bg-slate-800 px-1 py-0.5 rounded font-mono">{genType === "temp" ? "temp_premium_codes" : "premium_codes"}</code> table.
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
@@ -895,36 +700,18 @@ export default function PremiumView() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center gap-3 text-red-400 border-b border-slate-800 pb-3">
               <AlertTriangle className="w-7 h-7 shrink-0 text-red-400" />
-              <h2 className="text-base font-bold text-white">
-                Revoke Everyone's Premium
-              </h2>
+              <h2 className="text-base font-bold text-white">Revoke Everyone's Premium</h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Are you sure you want to{" "}
-              <strong className="text-red-400">
-                revoke premium access for ALL users
-              </strong>{" "}
-              app-wide?
+              Are you sure you want to <strong className="text-red-400">revoke premium access for ALL users</strong> app-wide?
             </p>
 
             <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300 space-y-1">
               <div className="font-bold">What this action does:</div>
               <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-300">
-                <li>
-                  Sets{" "}
-                  <code className="bg-slate-800 px-1 rounded text-red-300">
-                    is_premium = false
-                  </code>{" "}
-                  on all student profiles.
-                </li>
-                <li>
-                  Deletes all rows from the{" "}
-                  <code className="bg-slate-800 px-1 rounded text-red-300">
-                    premium_access
-                  </code>{" "}
-                  table.
-                </li>
+                <li>Sets <code className="bg-slate-800 px-1 rounded text-red-300">is_premium = false</code> on all student profiles.</li>
+                <li>Deletes all rows from the <code className="bg-slate-800 px-1 rounded text-red-300">premium_access</code> table.</li>
                 <li>Records an audit log entry.</li>
               </ul>
             </div>
@@ -942,11 +729,7 @@ export default function PremiumView() {
                 onClick={handleConfirmRevokeAll}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isRevoking ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <ShieldAlert className="w-4 h-4" />
-                )}
+                {isRevoking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
                 Yes, Revoke All Premium
               </button>
             </div>
@@ -962,31 +745,19 @@ export default function PremiumView() {
                 <Trash2 className="w-5 h-5 text-red-400" />
                 Delete All Codes
               </h2>
-              <button
-                onClick={() => setIsDeleteAllCodesOpen(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setIsDeleteAllCodesOpen(false)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Select which code database table to clear. This action will
-              permanently remove all generated codes.
+              Select which code database table to clear. This action will permanently remove all generated codes.
             </p>
 
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-400">
-                Deletion Scope
-              </label>
+              <label className="block text-xs font-semibold text-slate-400">Deletion Scope</label>
               <div className="space-y-2">
-                <label
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                    deleteTarget === "active"
-                      ? "bg-slate-800 border-amber-500/50 text-white"
-                      : "bg-slate-950/50 border-slate-800 text-slate-400"
-                  }`}
-                >
+                <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  deleteTarget === "active" ? "bg-slate-800 border-amber-500/50 text-white" : "bg-slate-950/50 border-slate-800 text-slate-400"
+                }`}>
                   <input
                     type="radio"
                     name="deleteScope"
@@ -997,27 +768,17 @@ export default function PremiumView() {
                   />
                   <div>
                     <div className="font-bold text-xs">
-                      Delete Current Tab Codes (
-                      {codeType === "temp"
-                        ? "temp_premium_codes"
-                        : "premium_codes"}
-                      )
+                      Delete Current Tab Codes ({codeType === "temp" ? "temp_premium_codes" : "premium_codes"})
                     </div>
                     <div className="text-[10px] text-slate-400">
-                      Clears only the{" "}
-                      {codeType === "temp" ? "temporary trial" : "full premium"}{" "}
-                      codes table.
+                      Clears only the {codeType === "temp" ? "temporary trial" : "full premium"} codes table.
                     </div>
                   </div>
                 </label>
 
-                <label
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                    deleteTarget === "both"
-                      ? "bg-red-500/10 border-red-500/50 text-red-300"
-                      : "bg-slate-950/50 border-slate-800 text-slate-400"
-                  }`}
-                >
+                <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  deleteTarget === "both" ? "bg-red-500/10 border-red-500/50 text-red-300" : "bg-slate-950/50 border-slate-800 text-slate-400"
+                }`}>
                   <input
                     type="radio"
                     name="deleteScope"
@@ -1031,8 +792,7 @@ export default function PremiumView() {
                       Delete ALL Codes (Both Premium & Temp Tables)
                     </div>
                     <div className="text-[10px] text-slate-400">
-                      Clears both premium_codes AND temp_premium_codes tables
-                      entirely.
+                      Clears both premium_codes AND temp_premium_codes tables entirely.
                     </div>
                   </div>
                 </label>
@@ -1040,8 +800,7 @@ export default function PremiumView() {
             </div>
 
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300">
-              ⚠️ Warning: Deleting codes will remove unused redemption keys.
-              Already redeemed access granted to users remains active.
+              ⚠️ Warning: Deleting codes will remove unused redemption keys. Already redeemed access granted to users remains active.
             </div>
 
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
@@ -1057,11 +816,7 @@ export default function PremiumView() {
                 onClick={handleConfirmDeleteAllCodes}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isDeletingCodes ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
+                {isDeletingCodes ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 Yes, Delete Selected Codes
               </button>
             </div>

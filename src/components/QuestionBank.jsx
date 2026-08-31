@@ -112,7 +112,7 @@ export default function QuestionBank({ initialCourseCode = "" }) {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(15);
+  const [limit] = useState(100); // Question bank — higher page size for large banks
   const [totalPages, setTotalPages] = useState(1);
 
   // Real universities from Supabase (no more hardcoded list)

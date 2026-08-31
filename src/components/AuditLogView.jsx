@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { ShieldCheck, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import {
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+} from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
@@ -8,7 +13,7 @@ export default function AuditLogView() {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(20);
+  const [limit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
 
   const fetchLogs = async () => {
@@ -18,9 +23,12 @@ export default function AuditLogView() {
       const token = session?.session?.access_token;
 
       const params = new URLSearchParams({ page, limit });
-      const res = await fetch(`${API_BASE_URL}/api/admin/audit-logs?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/audit-logs?${params}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       if (res.ok) {
         const data = await res.json();
@@ -48,7 +56,8 @@ export default function AuditLogView() {
           Administrative Audit Log & Trail
         </h1>
         <p className="text-slate-400 text-xs mt-1">
-          Chronological security audit trail of all sensitive admin actions, premium grants, and semester switches.
+          Chronological security audit trail of all sensitive admin actions,
+          premium grants, and semester switches.
         </p>
       </div>
 
@@ -60,7 +69,9 @@ export default function AuditLogView() {
             Loading audit history...
           </div>
         ) : logs.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 text-xs">No audit logs recorded yet.</div>
+          <div className="p-12 text-center text-slate-500 text-xs">
+            No audit logs recorded yet.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -91,7 +102,8 @@ export default function AuditLogView() {
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-300">
-                      {log.target_type} {log.target_id ? `(${log.target_id})` : ""}
+                      {log.target_type}{" "}
+                      {log.target_id ? `(${log.target_id})` : ""}
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-400 max-w-md truncate">
@@ -107,9 +119,19 @@ export default function AuditLogView() {
         {/* Pagination Bar */}
         <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
           <div>
-            Showing <span className="font-bold text-white">{logs.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
-            <span className="font-bold text-white">{Math.min(page * limit, total)}</span> of{" "}
-            <span className="font-bold text-white">{total.toLocaleString()}</span> entries
+            Showing{" "}
+            <span className="font-bold text-white">
+              {logs.length > 0 ? (page - 1) * limit + 1 : 0}
+            </span>{" "}
+            to{" "}
+            <span className="font-bold text-white">
+              {Math.min(page * limit, total)}
+            </span>{" "}
+            of{" "}
+            <span className="font-bold text-white">
+              {total.toLocaleString()}
+            </span>{" "}
+            entries
           </div>
 
           <div className="flex items-center gap-2">
@@ -120,7 +142,9 @@ export default function AuditLogView() {
             >
               <ChevronLeft className="w-4 h-4" /> Prev
             </button>
-            <span className="font-semibold text-slate-300 px-2">Page {page} of {totalPages}</span>
+            <span className="font-semibold text-slate-300 px-2">
+              Page {page} of {totalPages}
+            </span>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
