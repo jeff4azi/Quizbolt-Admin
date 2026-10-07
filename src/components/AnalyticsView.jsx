@@ -24,6 +24,38 @@ const TREND_RANGES = [
   { value: 90, label: "90D" },
 ];
 
+// Preset options for the course-attempt telemetry date filter
+const TELEMETRY_DATE_PRESETS = [
+  { key: "7d", label: "7 Days" },
+  { key: "30d", label: "30 Days" },
+  { key: "90d", label: "90 Days" },
+  { key: "all", label: "All Time" },
+  { key: "custom", label: "Custom" },
+];
+
+/** Returns { from_date, to_date } ISO strings (or null) for a given preset key */
+function presetToDates(preset) {
+  const today = new Date();
+  const iso = (d) => d.toISOString().split("T")[0];
+  if (preset === "7d")
+    return {
+      from_date: iso(new Date(today - 7 * 86400000)),
+      to_date: iso(today),
+    };
+  if (preset === "30d")
+    return {
+      from_date: iso(new Date(today - 30 * 86400000)),
+      to_date: iso(today),
+    };
+  if (preset === "90d")
+    return {
+      from_date: iso(new Date(today - 90 * 86400000)),
+      to_date: iso(today),
+    };
+  if (preset === "all") return { from_date: null, to_date: null };
+  return null; // custom — caller provides dates
+}
+
 // ---- Lightweight, dependency-free SVG charts -------------------------------
 
 function MiniBarChart({ data, valueKey, color = "#818cf8", height = 140 }) {
@@ -169,6 +201,19 @@ export default function AnalyticsView() {
   const [trendDays, setTrendDays] = useState(30);
   const { universities } = useUniversities();
 
+  // ── Telemetry date filter state ──────────────────────────────────────────
+  const [telemetryPreset, setTelemetryPreset] = useState("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  /** Resolved { from_date, to_date } to send to the API */
+  const telemetryDates = useMemo(() => {
+    if (telemetryPreset === "custom") {
+      return { from_date: customFrom || null, to_date: customTo || null };
+    }
+    return presetToDates(telemetryPreset) || { from_date: null, to_date: null };
+  }, [telemetryPreset, customFrom, customTo]);
+
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
@@ -178,6 +223,10 @@ export default function AnalyticsView() {
 
       const reportParams = new URLSearchParams();
       if (universityFilter) reportParams.append("university", universityFilter);
+      if (telemetryDates.from_date)
+        reportParams.append("from_date", telemetryDates.from_date);
+      if (telemetryDates.to_date)
+        reportParams.append("to_date", telemetryDates.to_date);
 
       const overviewParams = new URLSearchParams();
       if (universityFilter)
@@ -205,7 +254,7 @@ export default function AnalyticsView() {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [universityFilter, trendDays]);
+  }, [universityFilter, trendDays, telemetryDates]);
 
   const exportCsv = () => {
     if (!data?.courseStatsList) return;
@@ -507,10 +556,85 @@ export default function AnalyticsView() {
 
           {/* Course Attempt Telemetry */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl p-4 sm:p-6 space-y-4">
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-indigo-400" />
-              Course Attempt Telemetry (Grouped by Institution)
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-indigo-400" />
+                Course Attempt Telemetry (Grouped by Institution)
+              </h2>
+
+              {/* ── Date filter ─────────────────────────────────────────── */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5 shrink-0">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Period:
+                </span>
+                <div className="flex rounded-xl overflow-hidden border border-slate-700">
+                  {TELEMETRY_DATE_PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => setTelemetryPreset(p.key)}
+                      className={`px-3 py-2 font-bold transition ${
+                        telemetryPreset === p.key
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Custom date pickers — shown only when "Custom" is selected */}
+            {telemetryPreset === "custom" && (
+              <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-800/60 border border-slate-700 rounded-xl text-xs">
+                <span className="text-slate-400 font-semibold">From:</span>
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo || undefined}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <span className="text-slate-400 font-semibold">To:</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom || undefined}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                {(customFrom || customTo) && (
+                  <button
+                    onClick={() => {
+                      setCustomFrom("");
+                      setCustomTo("");
+                    }}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-bold transition"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Active filter label */}
+            {telemetryPreset !== "all" && (
+              <p className="text-[10px] text-slate-500">
+                {telemetryPreset === "custom"
+                  ? customFrom || customTo
+                    ? `Showing: ${customFrom || "start"} → ${customTo || "today"}`
+                    : "Select a date range above."
+                  : `Showing: last ${
+                      telemetryPreset === "7d"
+                        ? "7"
+                        : telemetryPreset === "30d"
+                          ? "30"
+                          : "90"
+                    } days`}
+              </p>
+            )}
+
             {!data?.courseStatsList || data.courseStatsList.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
                 No attempt telemetry recorded for this filter.
