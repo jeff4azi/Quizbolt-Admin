@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw, TrendingUp, Undo2, GraduationCap, BookOpen } from "lucide-react";
+import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw, TrendingUp, Undo2, GraduationCap, BookOpen, Gift } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 import { useUniversities, useColleges } from "../hooks/useUniversitiesAndColleges";
@@ -46,6 +46,15 @@ export default function UsersView() {
   const [undoStatus, setUndoStatus] = useState(null); // { canUndo, updatedCount, promotedAt }
   const [isUndoModalOpen, setIsUndoModalOpen] = useState(false);
   const [isUndoingLevel, setIsUndoingLevel] = useState(false);
+
+  // --- Grant Temporary Premium (Feature B) ---
+  const [grantModalUser, setGrantModalUser] = useState(null);
+  // grantTargetInfo = { user, isFullSemester: boolean, isTempActive: boolean, expiresAt: Date|null }
+  const [grantTargetInfo, setGrantTargetInfo] = useState(null);
+  const [grantPreset, setGrantPreset] = useState("contribution"); // "contribution" | "other"
+  const [grantReasonText, setGrantReasonText] = useState("");
+  const [grantDays, setGrantDays] = useState(7);
+  const [grantLoading, setGrantLoading] = useState(false);
 
   // Edit Modal State
   const [selectedUser, setSelectedUser] = useState(null);
@@ -273,6 +282,109 @@ export default function UsersView() {
     }
   };
 
+  // ---------------------------------------------------------------------
+  // Feature B: Grant Free Days UI
+  // ---------------------------------------------------------------------
+  const openGrantModal = async (u) => {
+    setGrantModalUser(u);
+    setGrantPreset("contribution");
+    setGrantReasonText("");
+    setGrantDays(7);
+    setGrantLoading(false);
+    setGrantTargetInfo(null);
+
+    try {
+      const { data: accessRow, error } = await supabase
+        .from("premium_access")
+        .select("expires_at, active")
+        .eq("user_id", u.id)
+        .maybeSingle();
+      if (error) throw error;
+
+      const now = new Date();
+      const isTempActive =
+        !!accessRow && accessRow.active && new Date(accessRow.expires_at) > now;
+
+      // Full-semester detection rule: is_premium=true AND NO premium_access row
+      // (redeem_premium_code explicitly DELETES premium_access for full-semester codes)
+      const isFullSemester = Boolean(u.is_premium) && !accessRow;
+
+      setGrantTargetInfo({
+        user: u,
+        isFullSemester,
+        isTempActive,
+        hasAccessRow: !!accessRow,
+        expiresAt: accessRow?.expires_at ? new Date(accessRow.expires_at) : null,
+      });
+    } catch {
+      // Fallback to optimistic data so the modal still opens
+      setGrantTargetInfo({
+        user: u,
+        isFullSemester:   false,
+        isTempActive:      false,
+        hasAccessRow:      false,
+        expiresAt:         null,
+      });
+    }
+  };
+
+  const closeGrantModal = () => {
+    setGrantModalUser(null);
+    setGrantTargetInfo(null);
+  };
+
+  const handleConfirmGrantDays = async () => {
+    if (!grantModalUser || !grantTargetInfo) return;
+    if (grantTargetInfo.isFullSemester) return;
+
+    const reason =
+      grantPreset === "contribution"
+        ? "Material Contribution"
+        : grantReasonText.trim();
+
+    if (!reason) {
+      alert("Please provide a reason for the grant.");
+      return;
+    }
+
+    setGrantLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(`${API_BASE_URL}/api/admin/premium-grants/grant-days`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: grantModalUser.id,
+          reason,
+          days:    grantDays,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to grant premium days");
+      }
+
+      closeGrantModal();
+      setNotification({
+        type: "success",
+        text: data.message
+          || `Granted ${data.days_added ?? grantDays} premium days to ${grantModalUser.full_name || grantModalUser.user_name}!`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+      fetchUsers();
+    } catch (err) {
+      alert(`Error granting premium days: ${err.message}`);
+    } finally {
+      setGrantLoading(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 text-slate-100">
       {/* Header */}
@@ -454,6 +566,17 @@ export default function UsersView() {
                           title="Edit Profile"
                         >
                           <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openGrantModal(u)}
+                          className={`p-1.5 rounded-lg transition ${
+                            u.is_premium
+                              ? "text-slate-400 hover:text-amber-400 hover:bg-slate-800"
+                              : "text-slate-400 hover:text-emerald-400 hover:bg-slate-800"
+                          }`}
+                          title="Grant Free Premium Days"
+                        >
+                          <Gift className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteUser(u.id, u.full_name || u.user_name)}
@@ -749,6 +872,162 @@ export default function UsersView() {
               >
                 {isUndoingLevel ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
                 Yes, Undo Promotion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grant Temporary Premium Modal (Feature B) */}
+      {grantModalUser && grantTargetInfo && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Gift className="w-5 h-5 text-emerald-400" />
+                Grant Temporary Premium
+              </h2>
+              <button onClick={closeGrantModal} className="text-slate-400 hover:text-slate-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target summary */}
+            <div className="p-3 bg-slate-950/40 border border-slate-800 rounded-xl space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold">Target</span>
+                <span className="text-white font-bold">
+                  {grantModalUser.full_name || grantModalUser.user_name || "Unnamed User"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold">University / Level</span>
+                <span className="text-slate-300">
+                  {grantModalUser.university || "—"} · {formatLevel(grantModalUser.year)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold">Plan Status</span>
+                <span>
+                  {grantTargetInfo.isFullSemester ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <Crown className="w-3 h-3" /> Full Semester
+                    </span>
+                  ) : grantTargetInfo.isTempActive ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                      Temp active · expires {grantTargetInfo.expiresAt?.toLocaleDateString()}
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                      Free Tier
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {/* Full-semester block banner */}
+            {grantTargetInfo.isFullSemester && (
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1 text-xs">
+                <div className="font-bold flex items-center gap-1.5 text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Full-semester user detected
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  This user already has <strong className="text-amber-300">permanent full-semester premium</strong> (not
+                  temporary). A free days grant is not required — their access never expires.
+                </p>
+              </div>
+            )}
+
+            {/* Reason + Day picker form */}
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Reason for grant</label>
+                <div className="space-y-2">
+                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                    grantPreset === "contribution"
+                      ? "bg-slate-800 border-emerald-500/50 text-white"
+                      : "bg-slate-950/50 border-slate-800 text-slate-400"
+                  }`}>
+                    <input
+                      type="radio"
+                      name="grantReason"
+                      checked={grantPreset === "contribution"}
+                      onChange={() => setGrantPreset("contribution")}
+                      className="accent-emerald-500"
+                    />
+                    <span className="font-semibold text-[11px]">Material Contribution</span>
+                  </label>
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                    grantPreset === "other"
+                      ? "bg-slate-800 border-emerald-500/50 text-white"
+                      : "bg-slate-950/50 border-slate-800 text-slate-400"
+                  }`}>
+                    <input
+                      type="radio"
+                      name="grantReason"
+                      checked={grantPreset === "other"}
+                      onChange={() => setGrantPreset("other")}
+                      className="mt-0.5 accent-emerald-500"
+                    />
+                    <div className="flex-1 space-y-1.5">
+                      <span className="font-semibold text-[11px]">Other reason</span>
+                      <input
+                        type="text"
+                        placeholder="E.g. Bug bounty, Beta tester gift, Support resolution…"
+                        value={grantReasonText}
+                        onChange={(e) => { setGrantReasonText(e.target.value); setGrantPreset("other"); }}
+                        onFocus={() => setGrantPreset("other")}
+                        className="w-full px-2.5 py-1.5 bg-slate-950/70 border border-slate-700 rounded-lg text-[11px] text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Days to grant</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[3, 7, 14, 30].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setGrantDays(d)}
+                      className={`py-2 rounded-lg text-[11px] font-bold border transition ${
+                        grantDays === d
+                          ? "bg-emerald-500 text-slate-950 border-emerald-500"
+                          : "bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-600"
+                      }`}
+                    >
+                      {d}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={grantLoading}
+                onClick={closeGrantModal}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={grantLoading || grantTargetInfo.isFullSemester}
+                onClick={handleConfirmGrantDays}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {grantLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Gift className="w-4 h-4" />
+                )}
+                Confirm Grant ({grantDays}d)
               </button>
             </div>
           </div>
