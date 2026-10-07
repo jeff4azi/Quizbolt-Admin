@@ -18,14 +18,8 @@ import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 import { useUniversities } from "../hooks/useUniversitiesAndColleges";
 
-const TREND_RANGES = [
-  { value: 7, label: "7D" },
-  { value: 30, label: "30D" },
-  { value: 90, label: "90D" },
-];
-
-// Preset options for the course-attempt telemetry date filter
-const TELEMETRY_DATE_PRESETS = [
+// Single set of date presets used by the whole page
+const DATE_PRESETS = [
   { key: "7d", label: "7 Days" },
   { key: "30d", label: "30 Days" },
   { key: "90d", label: "90 Days" },
@@ -33,7 +27,7 @@ const TELEMETRY_DATE_PRESETS = [
   { key: "custom", label: "Custom" },
 ];
 
-/** Returns { from_date, to_date } ISO strings (or null) for a given preset key */
+/** Convert a preset key to { from_date, to_date } ISO strings (or null). */
 function presetToDates(preset) {
   const today = new Date();
   const iso = (d) => d.toISOString().split("T")[0];
@@ -52,8 +46,7 @@ function presetToDates(preset) {
       from_date: iso(new Date(today - 90 * 86400000)),
       to_date: iso(today),
     };
-  if (preset === "all") return { from_date: null, to_date: null };
-  return null; // custom — caller provides dates
+  return { from_date: null, to_date: null }; // "all" or "custom"
 }
 
 // ---- Lightweight, dependency-free SVG charts -------------------------------
@@ -197,59 +190,55 @@ export default function AnalyticsView() {
   const [data, setData] = useState(null);
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [universityFilter, setUniversityFilter] = useState("");
-  const [trendDays, setTrendDays] = useState(30);
   const { universities } = useUniversities();
 
-  // ── Telemetry date filter state ──────────────────────────────────────────
-  const [telemetryPreset, setTelemetryPreset] = useState("all");
+  // ── Unified filter state ─────────────────────────────────────────────────
+  const [universityFilter, setUniversityFilter] = useState("");
+  const [datePreset, setDatePreset] = useState("30d");
 
-  // Draft state: only updated as the user types — does NOT trigger a fetch.
-  // Pre-populated from localStorage so the last custom range is always ready.
+  // Draft inputs for custom — changing these does NOT trigger a fetch
   const [draftFrom, setDraftFrom] = useState(
-    () => localStorage.getItem("telemetry_custom_from") || "",
+    () => localStorage.getItem("analytics_custom_from") || "",
   );
   const [draftTo, setDraftTo] = useState(
-    () => localStorage.getItem("telemetry_custom_to") || "",
+    () => localStorage.getItem("analytics_custom_to") || "",
   );
 
-  // Committed state: only updated when the user clicks "Apply" — triggers fetch.
-  // Also restored from localStorage so the applied range survives a page reload.
+  // Committed custom dates — updated only on "Apply", triggers fetch
   const [customFrom, setCustomFrom] = useState(
-    () => localStorage.getItem("telemetry_custom_from") || "",
+    () => localStorage.getItem("analytics_custom_from") || "",
   );
   const [customTo, setCustomTo] = useState(
-    () => localStorage.getItem("telemetry_custom_to") || "",
+    () => localStorage.getItem("analytics_custom_to") || "",
   );
 
-  /** Resolved { from_date, to_date } to send to the API */
-  const telemetryDates = useMemo(() => {
-    if (telemetryPreset === "custom") {
+  /** The resolved date window sent to both API endpoints */
+  const activeDates = useMemo(() => {
+    if (datePreset === "custom") {
       return { from_date: customFrom || null, to_date: customTo || null };
     }
-    return presetToDates(telemetryPreset) || { from_date: null, to_date: null };
-  }, [telemetryPreset, customFrom, customTo]);
+    return presetToDates(datePreset);
+  }, [datePreset, customFrom, customTo]);
 
-  /** Apply the draft dates, persist them, and trigger a fetch */
   const applyCustomDates = () => {
-    if (draftFrom) localStorage.setItem("telemetry_custom_from", draftFrom);
-    else localStorage.removeItem("telemetry_custom_from");
-    if (draftTo) localStorage.setItem("telemetry_custom_to", draftTo);
-    else localStorage.removeItem("telemetry_custom_to");
+    if (draftFrom) localStorage.setItem("analytics_custom_from", draftFrom);
+    else localStorage.removeItem("analytics_custom_from");
+    if (draftTo) localStorage.setItem("analytics_custom_to", draftTo);
+    else localStorage.removeItem("analytics_custom_to");
     setCustomFrom(draftFrom);
     setCustomTo(draftTo);
   };
 
-  /** Clear both draft and committed custom dates, remove from localStorage */
   const clearCustomDates = () => {
-    localStorage.removeItem("telemetry_custom_from");
-    localStorage.removeItem("telemetry_custom_to");
+    localStorage.removeItem("analytics_custom_from");
+    localStorage.removeItem("analytics_custom_to");
     setDraftFrom("");
     setDraftTo("");
     setCustomFrom("");
     setCustomTo("");
   };
 
+  // ── Data fetching ────────────────────────────────────────────────────────
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
@@ -257,26 +246,20 @@ export default function AnalyticsView() {
       const token = session?.session?.access_token;
       const headers = { Authorization: `Bearer ${token}` };
 
-      const reportParams = new URLSearchParams();
-      if (universityFilter) reportParams.append("university", universityFilter);
-      if (telemetryDates.from_date)
-        reportParams.append("from_date", telemetryDates.from_date);
-      if (telemetryDates.to_date)
-        reportParams.append("to_date", telemetryDates.to_date);
-
-      const overviewParams = new URLSearchParams();
-      if (universityFilter)
-        overviewParams.append("university", universityFilter);
-      overviewParams.append("days", String(trendDays));
+      const sharedParams = new URLSearchParams();
+      if (universityFilter) sharedParams.append("university", universityFilter);
+      if (activeDates.from_date)
+        sharedParams.append("from_date", activeDates.from_date);
+      if (activeDates.to_date)
+        sharedParams.append("to_date", activeDates.to_date);
 
       const [reportRes, overviewRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/admin/analytics?${reportParams}`, {
+        fetch(`${API_BASE_URL}/api/admin/analytics?${sharedParams}`, {
           headers,
         }),
-        fetch(
-          `${API_BASE_URL}/api/admin/analytics/overview?${overviewParams}`,
-          { headers },
-        ),
+        fetch(`${API_BASE_URL}/api/admin/analytics/overview?${sharedParams}`, {
+          headers,
+        }),
       ]);
 
       if (reportRes.ok) setData(await reportRes.json());
@@ -290,20 +273,20 @@ export default function AnalyticsView() {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [universityFilter, trendDays, telemetryDates]);
+  }, [universityFilter, activeDates]);
 
+  // ── Helpers ──────────────────────────────────────────────────────────────
   const exportCsv = () => {
     if (!data?.courseStatsList) return;
     let csv = "University,Course Code,Attempts,Retakes,Avg Score %\n";
     data.courseStatsList.forEach((item) => {
       csv += `"${item.university}","${item.course_code}",${item.attempts},${item.retakes},${item.avg_score}\n`;
     });
-
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `quizbolt-university-analytics-${Date.now()}.csv`;
+    a.download = `quizbolt-analytics-${Date.now()}.csv`;
     a.click();
   };
 
@@ -312,8 +295,24 @@ export default function AnalyticsView() {
     return Math.max(1, ...counts);
   }, [overview]);
 
+  /** Human-readable label for the active date window */
+  const activeDateLabel = useMemo(() => {
+    if (datePreset === "all") return "All Time";
+    if (datePreset === "7d") return "Last 7 Days";
+    if (datePreset === "30d") return "Last 30 Days";
+    if (datePreset === "90d") return "Last 90 Days";
+    if (datePreset === "custom") {
+      if (customFrom || customTo)
+        return `${customFrom || "start"} → ${customTo || "today"}`;
+      return "Custom (not applied)";
+    }
+    return "";
+  }, [datePreset, customFrom, customTo]);
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="p-4 sm:p-6 space-y-6 text-slate-100">
+      {/* Page header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -325,7 +324,6 @@ export default function AnalyticsView() {
             here is capped by API row limits.
           </p>
         </div>
-
         <div className="flex items-center gap-3">
           <button
             onClick={fetchAnalytics}
@@ -333,12 +331,12 @@ export default function AnalyticsView() {
           >
             <RefreshCw
               className={`w-3.5 h-3.5 text-slate-400 ${loading ? "animate-spin" : ""}`}
-            />{" "}
+            />
             Refresh
           </button>
           <button
             onClick={exportCsv}
-            disabled={!data || !data.courseStatsList}
+            disabled={!data?.courseStatsList}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
           >
             <Download className="w-4 h-4 text-slate-400" /> Export CSV
@@ -346,45 +344,106 @@ export default function AnalyticsView() {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-wrap items-center gap-4 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-            <Filter className="w-4 h-4 text-indigo-400" /> University:
-          </span>
-          <select
-            value={universityFilter}
-            onChange={(e) => setUniversityFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Universities</option>
-            {universities.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name || u.id}
-              </option>
-            ))}
-          </select>
+      {/* ── Unified Filter Bar ─────────────────────────────────────────────── */}
+      <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg space-y-3 text-xs">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* University picker */}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-semibold flex items-center gap-1.5 shrink-0">
+              <Filter className="w-4 h-4 text-indigo-400" /> University:
+            </span>
+            <select
+              value={universityFilter}
+              onChange={(e) => setUniversityFilter(e.target.value)}
+              className="px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">All Universities</option>
+              {universities.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name || u.id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date preset buttons */}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-semibold flex items-center gap-1.5 shrink-0">
+              <Calendar className="w-4 h-4 text-indigo-400" /> Period:
+            </span>
+            <div className="flex rounded-xl overflow-hidden border border-slate-700">
+              {DATE_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setDatePreset(p.key)}
+                  className={`px-3 py-2 font-bold transition ${
+                    datePreset === p.key
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-indigo-400" /> Trend window:
-          </span>
-          <div className="flex rounded-xl overflow-hidden border border-slate-700">
-            {TREND_RANGES.map((r) => (
+        {/* Custom date pickers — only visible when "Custom" is selected */}
+        {datePreset === "custom" && (
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <span className="text-slate-400 font-semibold">From:</span>
+            <input
+              type="date"
+              value={draftFrom}
+              max={draftTo || undefined}
+              onChange={(e) => setDraftFrom(e.target.value)}
+              className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <span className="text-slate-400 font-semibold">To:</span>
+            <input
+              type="date"
+              value={draftTo}
+              min={draftFrom || undefined}
+              onChange={(e) => setDraftTo(e.target.value)}
+              className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={applyCustomDates}
+              disabled={!draftFrom && !draftTo}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-bold transition"
+            >
+              Apply
+            </button>
+            {(draftFrom || draftTo || customFrom || customTo) && (
               <button
-                key={r.value}
-                onClick={() => setTrendDays(r.value)}
-                className={`px-3 py-2 font-bold transition ${
-                  trendDays === r.value
-                    ? "bg-indigo-600 text-white"
-                    : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                }`}
+                onClick={clearCustomDates}
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-bold transition"
               >
-                {r.label}
+                Clear
               </button>
-            ))}
+            )}
           </div>
+        )}
+
+        {/* Active filter summary pill */}
+        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+          <span className="font-semibold text-slate-400">Viewing:</span>
+          <span className="px-2 py-0.5 bg-indigo-900/50 border border-indigo-700/50 text-indigo-300 rounded-full font-bold">
+            {universityFilter
+              ? universities.find((u) => u.id === universityFilter)?.name ||
+                universityFilter
+              : "All Universities"}
+          </span>
+          <span className="text-slate-600">·</span>
+          <span className="px-2 py-0.5 bg-indigo-900/50 border border-indigo-700/50 text-indigo-300 rounded-full font-bold">
+            {activeDateLabel}
+          </span>
+          {datePreset === "custom" && !customFrom && !customTo && (
+            <span className="text-amber-500 font-semibold">
+              — set a range and click Apply
+            </span>
+          )}
         </div>
       </div>
 
@@ -405,7 +464,7 @@ export default function AnalyticsView() {
             <KpiCard
               icon={Crown}
               label="Premium Users"
-              value={`${(overview?.premiumUsers || 0).toLocaleString()}`}
+              value={(overview?.premiumUsers || 0).toLocaleString()}
               sub={`${overview?.premiumRate ?? 0}% of users`}
               accent="text-amber-400"
             />
@@ -454,7 +513,7 @@ export default function AnalyticsView() {
             <div className="p-4 sm:p-5 bg-slate-900/80 border border-slate-800 rounded-2xl">
               <div className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-indigo-400" /> New Signups (
-                {trendDays}D)
+                {activeDateLabel})
               </div>
               {overview?.signupsTrend?.length ? (
                 <MiniBarChart
@@ -473,7 +532,7 @@ export default function AnalyticsView() {
               <div className="text-xs font-bold text-slate-300 mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />{" "}
-                  Attempts Over Time ({trendDays}D)
+                  Attempts Over Time ({activeDateLabel})
                 </span>
                 <span className="flex items-center gap-3 text-[10px] font-semibold normal-case">
                   <span className="flex items-center gap-1 text-indigo-300">
@@ -592,89 +651,10 @@ export default function AnalyticsView() {
 
           {/* Course Attempt Telemetry */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl p-4 sm:p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-indigo-400" />
-                Course Attempt Telemetry (Grouped by Institution)
-              </h2>
-
-              {/* ── Date filter ─────────────────────────────────────────── */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-slate-400 font-semibold flex items-center gap-1.5 shrink-0">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Period:
-                </span>
-                <div className="flex rounded-xl overflow-hidden border border-slate-700">
-                  {TELEMETRY_DATE_PRESETS.map((p) => (
-                    <button
-                      key={p.key}
-                      onClick={() => setTelemetryPreset(p.key)}
-                      className={`px-3 py-2 font-bold transition ${
-                        telemetryPreset === p.key
-                          ? "bg-indigo-600 text-white"
-                          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Custom date pickers — shown only when "Custom" is selected */}
-            {telemetryPreset === "custom" && (
-              <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-800/60 border border-slate-700 rounded-xl text-xs">
-                <span className="text-slate-400 font-semibold">From:</span>
-                <input
-                  type="date"
-                  value={draftFrom}
-                  max={draftTo || undefined}
-                  onChange={(e) => setDraftFrom(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <span className="text-slate-400 font-semibold">To:</span>
-                <input
-                  type="date"
-                  value={draftTo}
-                  min={draftFrom || undefined}
-                  onChange={(e) => setDraftTo(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button
-                  onClick={applyCustomDates}
-                  disabled={!draftFrom && !draftTo}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-bold transition"
-                >
-                  Apply
-                </button>
-                {(draftFrom || draftTo || customFrom || customTo) && (
-                  <button
-                    onClick={clearCustomDates}
-                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-bold transition"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Active filter label */}
-            {telemetryPreset !== "all" && (
-              <p className="text-[10px] text-slate-500">
-                {telemetryPreset === "custom"
-                  ? customFrom || customTo
-                    ? `Showing: ${customFrom || "start"} → ${customTo || "today"}`
-                    : "Set a date range and click Apply."
-                  : `Showing: last ${
-                      telemetryPreset === "7d"
-                        ? "7"
-                        : telemetryPreset === "30d"
-                          ? "30"
-                          : "90"
-                    } days`}
-              </p>
-            )}
-
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <GraduationCap className="w-5 h-5 text-indigo-400" />
+              Course Attempt Telemetry (Grouped by Institution)
+            </h2>
             {!data?.courseStatsList || data.courseStatsList.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
                 No attempt telemetry recorded for this filter.
