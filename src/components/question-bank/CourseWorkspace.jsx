@@ -140,12 +140,12 @@ export default function CourseWorkspace({
         });
         if (res.ok) {
           const resData = await res.json();
-          let list = resData.data || [];
+          let list = resData.data || resData.questions || [];
           if (search) {
             list = list.filter((q) => (q.question || "").toLowerCase().includes(search.toLowerCase()));
           }
           setQuestions(list);
-          setTotalQuestions(resData.count || 0);
+          setTotalQuestions(resData.total !== undefined ? resData.total : (resData.count || 0));
           setTotalPages(resData.totalPages || 1);
         }
       } else {
@@ -167,14 +167,14 @@ export default function CourseWorkspace({
 
         if (res.ok) {
           const resData = await res.json();
-          let list = resData.data || [];
+          let list = resData.questions || resData.data || [];
           if (sectionFilter) {
             list = list.filter(
               (q) => (q.section || "").toLowerCase() === sectionFilter.toLowerCase()
             );
           }
           setQuestions(list);
-          setTotalQuestions(resData.count || 0);
+          setTotalQuestions(resData.total !== undefined ? resData.total : (resData.count || 0));
           setTotalPages(resData.totalPages || 1);
         }
       }
