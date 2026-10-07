@@ -203,8 +203,24 @@ export default function AnalyticsView() {
 
   // ── Telemetry date filter state ──────────────────────────────────────────
   const [telemetryPreset, setTelemetryPreset] = useState("all");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+
+  // Draft state: only updated as the user types — does NOT trigger a fetch.
+  // Pre-populated from localStorage so the last custom range is always ready.
+  const [draftFrom, setDraftFrom] = useState(
+    () => localStorage.getItem("telemetry_custom_from") || "",
+  );
+  const [draftTo, setDraftTo] = useState(
+    () => localStorage.getItem("telemetry_custom_to") || "",
+  );
+
+  // Committed state: only updated when the user clicks "Apply" — triggers fetch.
+  // Also restored from localStorage so the applied range survives a page reload.
+  const [customFrom, setCustomFrom] = useState(
+    () => localStorage.getItem("telemetry_custom_from") || "",
+  );
+  const [customTo, setCustomTo] = useState(
+    () => localStorage.getItem("telemetry_custom_to") || "",
+  );
 
   /** Resolved { from_date, to_date } to send to the API */
   const telemetryDates = useMemo(() => {
@@ -213,6 +229,26 @@ export default function AnalyticsView() {
     }
     return presetToDates(telemetryPreset) || { from_date: null, to_date: null };
   }, [telemetryPreset, customFrom, customTo]);
+
+  /** Apply the draft dates, persist them, and trigger a fetch */
+  const applyCustomDates = () => {
+    if (draftFrom) localStorage.setItem("telemetry_custom_from", draftFrom);
+    else localStorage.removeItem("telemetry_custom_from");
+    if (draftTo) localStorage.setItem("telemetry_custom_to", draftTo);
+    else localStorage.removeItem("telemetry_custom_to");
+    setCustomFrom(draftFrom);
+    setCustomTo(draftTo);
+  };
+
+  /** Clear both draft and committed custom dates, remove from localStorage */
+  const clearCustomDates = () => {
+    localStorage.removeItem("telemetry_custom_from");
+    localStorage.removeItem("telemetry_custom_to");
+    setDraftFrom("");
+    setDraftTo("");
+    setCustomFrom("");
+    setCustomTo("");
+  };
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -591,25 +627,29 @@ export default function AnalyticsView() {
                 <span className="text-slate-400 font-semibold">From:</span>
                 <input
                   type="date"
-                  value={customFrom}
-                  max={customTo || undefined}
-                  onChange={(e) => setCustomFrom(e.target.value)}
+                  value={draftFrom}
+                  max={draftTo || undefined}
+                  onChange={(e) => setDraftFrom(e.target.value)}
                   className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <span className="text-slate-400 font-semibold">To:</span>
                 <input
                   type="date"
-                  value={customTo}
-                  min={customFrom || undefined}
-                  onChange={(e) => setCustomTo(e.target.value)}
+                  value={draftTo}
+                  min={draftFrom || undefined}
+                  onChange={(e) => setDraftTo(e.target.value)}
                   className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                {(customFrom || customTo) && (
+                <button
+                  onClick={applyCustomDates}
+                  disabled={!draftFrom && !draftTo}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-bold transition"
+                >
+                  Apply
+                </button>
+                {(draftFrom || draftTo || customFrom || customTo) && (
                   <button
-                    onClick={() => {
-                      setCustomFrom("");
-                      setCustomTo("");
-                    }}
+                    onClick={clearCustomDates}
                     className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-bold transition"
                   >
                     Clear
@@ -624,7 +664,7 @@ export default function AnalyticsView() {
                 {telemetryPreset === "custom"
                   ? customFrom || customTo
                     ? `Showing: ${customFrom || "start"} → ${customTo || "today"}`
-                    : "Select a date range above."
+                    : "Set a date range and click Apply."
                   : `Showing: last ${
                       telemetryPreset === "7d"
                         ? "7"
