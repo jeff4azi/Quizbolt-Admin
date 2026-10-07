@@ -24,6 +24,7 @@ export default function App() {
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedCourseCode, setSelectedCourseCode] = useState("");
+  const [selectedUniversity, setSelectedUniversity] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Check initial Supabase auth session & verify admin role
@@ -81,7 +82,10 @@ export default function App() {
   };
 
   const handleTabChange = (tab) => {
-    if (tab !== "questions") setSelectedCourseCode("");
+    if (tab !== "questions") {
+      setSelectedCourseCode("");
+      setSelectedUniversity("");
+    }
     setActiveTab(tab);
     setSidebarOpen(false); // always close drawer after nav on mobile
   };
@@ -145,14 +149,21 @@ export default function App() {
           {activeTab === "universities" && <UniversitiesView />}
           {activeTab === "courses" && (
             <CoursesView
-              onNavigateToQuestions={(code) => {
+              onNavigateToQuestions={(code, uni) => {
                 setSelectedCourseCode(code);
+                setSelectedUniversity(uni || "");
                 setActiveTab("questions");
                 setSidebarOpen(false);
               }}
             />
           )}
-          {activeTab === "questions" && <QuestionBank initialCourseCode={selectedCourseCode} />}
+          {activeTab === "questions" && (
+            <QuestionBank
+              initialCourseCode={selectedCourseCode}
+              initialUniversity={selectedUniversity}
+              adminRecord={adminRecord}
+            />
+          )}
           {activeTab === "premium" && <PremiumView />}
           {activeTab === "reviews" && <ReviewsView />}
           {activeTab === "referrals" && <ReferralsView />}
