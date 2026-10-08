@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   BookOpen,
   Plus,
@@ -55,6 +55,9 @@ export default function CoursesView({ onNavigateToQuestions }) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
+
+  // Tracks whether the college picker is in "edit" mode (pre-filled) vs "create" (auto-select all)
+  const isEditingMode = useRef(false);
 
   // Form Data for Single Course
   const [formData, setFormData] = useState({
@@ -150,12 +153,13 @@ export default function CoursesView({ onNavigateToQuestions }) {
     fetchCounts();
   }, [page, debouncedSearch, university, level, semester, group]);
 
-  // Update colleges on modal
+  // Update colleges on modal — only auto-select all colleges when CREATING (not editing)
   useEffect(() => {
     if (formData.course_group === "general") {
       setSelectedColleges(["ALL"]);
     } else {
-      if (selectedColleges.length === 1 && selectedColleges[0] === "ALL") {
+      // Only auto-select all colleges when creating a new course, not when editing
+      if (!isEditingMode.current && selectedColleges.length === 1 && selectedColleges[0] === "ALL") {
         setSelectedColleges(availableColleges.map((c) => c.id));
       }
     }
@@ -221,6 +225,7 @@ export default function CoursesView({ onNavigateToQuestions }) {
 
   // Open edit modal pre-populated with the selected course
   const openEditModal = (course) => {
+    isEditingMode.current = true; // prevent the auto-select effect from overwriting pre-filled colleges
     setEditingCourse(course);
     setFormData({
       course_code: course.course_code || "",
@@ -228,7 +233,8 @@ export default function CoursesView({ onNavigateToQuestions }) {
       course_group: course.course_group || "general",
       level: String(course.level || "100"),
       semester: String(course.semester || "1"),
-      university: course.university || "",
+      // Normalize to lowercase so useColleges() fetches the right data from the API
+      university: (course.university || "").toLowerCase(),
     });
     setSelectedColleges(
       Array.isArray(course.colleges) && course.colleges.length > 0
@@ -782,6 +788,38 @@ export default function CoursesView({ onNavigateToQuestions }) {
             </div>
 
             <form onSubmit={handleUpdateCourse} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Course Code</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. CSC115"
+                    value={formData.course_code}
+                    onChange={(e) =>
+                      setFormData({ ...formData, course_code: e.target.value.toUpperCase() })
+                    }
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold uppercase focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">University</label>
+                  <select
+                    required
+                    value={formData.university}
+                    onChange={(e) => setFormData({ ...formData, university: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="">Select University</option>
+                    {universities.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name || u.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-400 mb-1 font-semibold">Course Title</label>
                 <input
