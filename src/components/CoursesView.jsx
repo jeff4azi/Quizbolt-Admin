@@ -174,6 +174,29 @@ export default function CoursesView({ onNavigateToQuestions }) {
     }
   };
 
+  const resetForm = () => {
+    isEditingMode.current = false;
+    setFormData({
+      course_code: "",
+      title: "",
+      course_group: "general",
+      level: "100",
+      semester: "1",
+      university: "",
+    });
+    setSelectedColleges(["ALL"]);
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setIsAddModalOpen(true);
+  };
+
+  const closeAddModal = () => {
+    setIsAddModalOpen(false);
+    resetForm();
+  };
+
   const handleCreateCourse = async (e) => {
     e.preventDefault();
     try {
@@ -202,15 +225,7 @@ export default function CoursesView({ onNavigateToQuestions }) {
       });
 
       if (res.ok) {
-        setIsAddModalOpen(false);
-        setFormData({
-          course_code: "",
-          title: "",
-          course_group: "general",
-          level: "100",
-          semester: "1",
-          university: "",
-        });
+        closeAddModal();
         setNotification({ type: "success", message: "Course created successfully!" });
         fetchCourses();
         fetchCounts();
@@ -358,7 +373,7 @@ export default function CoursesView({ onNavigateToQuestions }) {
             Bulk Import
           </button>
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={openAddModal}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition"
           >
             <Plus className="w-4 h-4" />
@@ -623,7 +638,7 @@ export default function CoursesView({ onNavigateToQuestions }) {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-base font-bold text-white">Create New Course Entry</h2>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={closeAddModal}
                 className="text-slate-400 hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
@@ -742,7 +757,7 @@ export default function CoursesView({ onNavigateToQuestions }) {
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={closeAddModal}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition"
                 >
                   Cancel
