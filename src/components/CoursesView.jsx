@@ -13,6 +13,9 @@ import {
   HelpCircle,
   FileQuestion,
   Sparkles,
+  Edit2,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
@@ -42,6 +45,16 @@ export default function CoursesView({ onNavigateToQuestions }) {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+
+  // Edit modal state
+  const [editingCourse, setEditingCourse] = useState(null); // course object being edited
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Delete confirm state
+  const [deletingCourse, setDeletingCourse] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   // Form Data for Single Course
   const [formData, setFormData] = useState({
@@ -203,6 +216,116 @@ export default function CoursesView({ onNavigateToQuestions }) {
       }
     } catch (err) {
       setNotification({ type: "error", message: err.message });
+    }
+  };
+
+  // Open edit modal pre-populated with the selected course
+  const openEditModal = (course) => {
+    setEditingCourse(course);
+    setFormData({
+      course_code: course.course_code || "",
+      title: course.title || "",
+      course_group: course.course_group || "general",
+      level: String(course.level || "100"),
+      semester: String(course.semester || "1"),
+      university: course.university || "",
+    });
+    setSelectedColleges(
+      Array.isArray(course.colleges) && course.colleges.length > 0
+        ? course.colleges
+        : ["ALL"]
+    );
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateCourse = async (e) => {
+    e.preventDefault();
+    if (!editingCourse) return;
+    setEditSaving(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const finalColleges =
+        formData.course_group === "general"
+          ? ["ALL"]
+          : selectedColleges.length === 0
+          ? ["ALL"]
+          : selectedColleges;
+
+      const payload = {
+        ...formData,
+        colleges: finalColleges,
+      };
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/courses/${editingCourse.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (res.ok) {
+        setIsEditModalOpen(false);
+        setEditingCourse(null);
+        setNotification({ type: "success", message: "Course updated successfully!" });
+        fetchCourses();
+        fetchCounts();
+      } else {
+        const errData = await res.json();
+        setNotification({ type: "error", message: errData.error || "Failed to update course" });
+      }
+    } catch (err) {
+      setNotification({ type: "error", message: err.message });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // Delete: prompt confirm modal
+  const openDeleteModal = (course) => {
+    const countKey = `${(course.university || "").trim().toUpperCase()}_${(course.course_code || "").trim().toUpperCase()}`;
+    const counts = countsMap[countKey] || { total: 0 };
+    setDeletingCourse({ ...course, questionCount: counts.total });
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!deletingCourse) return;
+    setDeleteLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/courses/${deletingCourse.id}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const resData = await res.json();
+
+      if (res.ok) {
+        setIsDeleteModalOpen(false);
+        setDeletingCourse(null);
+        setNotification({ type: "success", message: `Course "${deletingCourse.course_code}" deleted.` });
+        fetchCourses();
+        fetchCounts();
+      } else {
+        setNotification({ type: "error", message: resData.error || "Failed to delete course" });
+        setIsDeleteModalOpen(false);
+      }
+    } catch (err) {
+      setNotification({ type: "error", message: err.message });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -422,12 +545,32 @@ export default function CoursesView({ onNavigateToQuestions }) {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => onNavigateToQuestions && onNavigateToQuestions(c.course_code, c.university)}
-                          className="px-3 py-1.5 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold hover:bg-indigo-600 hover:text-white transition flex items-center gap-1.5 ml-auto"
-                        >
-                          View Questions
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEditModal(c); }}
+                            title="Edit course"
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600/30 border border-slate-700 hover:border-indigo-500/50 text-slate-400 hover:text-indigo-300 transition"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openDeleteModal(c); }}
+                            title={counts.total > 0 ? `Cannot delete — has ${counts.total} question(s)` : "Delete course"}
+                            className={`p-1.5 rounded-lg border transition ${
+                              counts.total > 0
+                                ? "bg-slate-800/50 border-slate-700/50 text-slate-600 cursor-not-allowed"
+                                : "bg-slate-800 hover:bg-rose-600/30 border-slate-700 hover:border-rose-500/50 text-slate-400 hover:text-rose-300"
+                            }`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => onNavigateToQuestions && onNavigateToQuestions(c.course_code, c.university)}
+                            className="px-3 py-1.5 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold hover:bg-indigo-600 hover:text-white transition flex items-center gap-1.5"
+                          >
+                            Questions
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -620,6 +763,184 @@ export default function CoursesView({ onNavigateToQuestions }) {
           fetchCounts();
         }}
       />
+
+      {/* Edit Course Modal */}
+      {isEditModalOpen && editingCourse && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-white">Edit Course</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-mono">{editingCourse.course_code} · {editingCourse.university}</p>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCourse} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Course Title</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Level</label>
+                  <select
+                    value={formData.level}
+                    onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="300">300</option>
+                    <option value="400">400</option>
+                    <option value="500">500</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Semester</label>
+                  <select
+                    value={formData.semester}
+                    onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="1">1st Semester</option>
+                    <option value="2">2nd Semester</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Group</label>
+                  <select
+                    value={formData.course_group}
+                    onChange={(e) => setFormData({ ...formData, course_group: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="general">General</option>
+                    <option value="departmental">Departmental</option>
+                    <option value="vocational">Vocational</option>
+                  </select>
+                </div>
+              </div>
+
+              {formData.course_group !== "general" && (
+                <div>
+                  <label className="block text-slate-400 mb-1.5 font-semibold">Applicable Colleges</label>
+                  <div className="max-h-32 overflow-y-auto space-y-1 p-2 bg-slate-950/60 rounded-xl border border-slate-800">
+                    {availableColleges.map((col) => (
+                      <label
+                        key={col.id}
+                        className="flex items-center gap-2 text-slate-300 hover:text-white cursor-pointer py-0.5"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedColleges.includes(col.id)}
+                          onChange={() => toggleCollegeSelection(col.id)}
+                          className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>{col.name || col.id}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white rounded-xl font-semibold shadow-lg shadow-indigo-600/20 transition flex items-center gap-2"
+                >
+                  {editSaving ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+                  ) : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Course Confirmation Modal */}
+      {isDeleteModalOpen && deletingCourse && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-4 h-4 text-rose-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-white">Delete Course</h2>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5">{deletingCourse.course_code} · {deletingCourse.university}</p>
+              </div>
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="ml-auto text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {deletingCourse.questionCount > 0 ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 flex items-start gap-3 text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="text-amber-200">
+                  <p className="font-semibold mb-1">Cannot delete this course</p>
+                  <p className="text-amber-300/80">
+                    <strong className="text-amber-300">{deletingCourse.questionCount}</strong> question{deletingCourse.questionCount !== 1 ? "s" : ""} are linked to this course.
+                    Delete or move all questions first before removing the course.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-300 space-y-1">
+                <p>Are you sure you want to permanently delete:</p>
+                <p className="font-semibold text-white">&ldquo;{deletingCourse.title}&rdquo;</p>
+                <p className="text-slate-500 pt-1">This action cannot be undone.</p>
+              </div>
+            )}
+
+            <div className="pt-1 flex justify-end gap-2">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+              >
+                {deletingCourse.questionCount > 0 ? "Close" : "Cancel"}
+              </button>
+              {deletingCourse.questionCount === 0 && (
+                <button
+                  onClick={handleDeleteCourse}
+                  disabled={deleteLoading}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-60 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+                >
+                  {deleteLoading ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting...</>
+                  ) : (<><Trash2 className="w-3.5 h-3.5" /> Delete Course</>)}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
