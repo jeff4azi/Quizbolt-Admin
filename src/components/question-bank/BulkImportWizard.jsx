@@ -111,95 +111,60 @@ export default function BulkImportWizard({
       return;
     }
 
-    // 1. Fetch ALL existing questions from DB for this course/university to prevent ID/stem overlaps
-    let dbQuestions = [];
     try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
       const targetUni = activeCourse?.university || defaults.university;
       const targetCode = activeCourse?.course_code || defaults.course_code;
 
-      if (targetUni && targetCode) {
-        const { data, error } = await supabase
-          .from("questions")
-          .select("question_id, question, type")
-          .eq("university", targetUni)
-          .ilike("course_code", targetCode);
+      const res = await fetch(`${API_BASE_URL}/api/admin/questions/preview-import`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          questions: parseRes.questions,
+          university: targetUni,
+          course_code: targetCode,
+        }),
+      });
 
-        if (!error && Array.isArray(data)) {
-          dbQuestions = data;
-        }
+      const previewData = await res.json();
+      if (!res.ok) {
+        throw new Error(previewData.error || "Failed to validate preview.");
       }
+
+      setPreviewQuestions(previewData.questions || []);
+      setValidationSummary({
+        total: previewData.total || 0,
+        valid: previewData.valid || 0,
+        invalid: previewData.invalid || 0,
+        duplicates: previewData.duplicates || 0,
+      });
+      setStep(3);
     } catch (err) {
-      console.warn("Could not fetch DB questions for duplicate check:", err);
+      setParseError(err.message);
+    } finally {
+      setIsParsing(false);
     }
+  };
 
-    // Combine database IDs with any props passed in
-    const allDbQuestionIds = dbQuestions
-      .map((q) => q.question_id)
-      .concat(existingQuestions.map((q) => q.question_id))
-      .filter(Boolean);
-
-    // 2. Assign IDs to questions lacking question_id sequentially from highest existing DB number
-    let assignedList = [];
-    let currentExistingIds = [...allDbQuestionIds];
-
-    parseRes.questions.forEach((q) => {
-      if (!q.question_id) {
-        const nextId = deriveNextQuestionId(
-          currentExistingIds,
-          activeCourse?.course_code || defaults.course_code,
-          q.type
-        );
-        currentExistingIds.push(nextId);
-        assignedList.push({ ...q, question_id: nextId });
-      } else {
-        currentExistingIds.push(q.question_id);
-        assignedList.push(q);
-      }
-    });
-
-    // 3. Detect duplicates against complete database records
-    const duplicateChecked = detectDuplicates(assignedList, dbQuestions);
-
-    let validCount = 0;
-    let invalidCount = 0;
-    let duplicateCount = 0;
-
-    const validatedList = duplicateChecked.map((q, idx) => {
-      const { isValid, errors, warnings, flags } = validateQuestion(q);
-      const isDuplicate = Boolean(q._isDuplicate);
-
-      let skipReason = null;
-      if (isDuplicate) {
-        skipReason = q._duplicateReason;
-        duplicateCount++;
-      } else if (!isValid) {
-        skipReason = errors.join("; ");
-        invalidCount++;
-      } else {
-        validCount++;
-      }
-
-      return {
-        ...q,
-        _rowIndex: idx + 1,
-        _isValid: isValid,
-        _isDuplicate: isDuplicate,
-        _skipReason: skipReason,
-        _errors: errors,
-        _warnings: warnings,
-        _flags: flags,
-      };
-    });
-
-    setPreviewQuestions(validatedList);
-    setValidationSummary({
-      total: validatedList.length,
-      valid: validCount,
-      invalid: invalidCount,
-      duplicates: duplicateCount,
-    });
-    setStep(3);
-    setIsParsing(false);
+  const toggleOverrideDuplicate = (rowIndex) => {
+    setPreviewQuestions((prev) =>
+      prev.map((q) => {
+        if (q._rowIndex === rowIndex) {
+          const newIsDuplicate = !q._isDuplicate;
+          return {
+            ...q,
+            _isDuplicate: newIsDuplicate,
+            _userOverridden: true,
+          };
+        }
+        return q;
+      })
+    );
   };
 
   const handleExecuteImport = async () => {

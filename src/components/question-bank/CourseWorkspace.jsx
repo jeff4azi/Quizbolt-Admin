@@ -57,6 +57,70 @@ export default function CourseWorkspace({
   });
   const [needsReviewCount, setNeedsReviewCount] = useState(0);
 
+  // Duplicate detection state
+  const [duplicatePairs, setDuplicatePairs] = useState([]);
+  const [duplicatePairsCount, setDuplicatePairsCount] = useState(0);
+  const [duplicateThreshold, setDuplicateThreshold] = useState(0.70);
+  const [includeOtherTypes, setIncludeOtherTypes] = useState(false);
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false);
+
+  const fetchDuplicates = async () => {
+    if (!activeCourse?.university || !activeCourse?.course_code) return;
+    setLoadingDuplicates(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const params = new URLSearchParams({
+        university: activeCourse.university,
+        course_code: activeCourse.course_code,
+        threshold: duplicateThreshold,
+        include_other_types: includeOtherTypes,
+      });
+      const res = await fetch(`${API_BASE_URL}/api/admin/questions/duplicates?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const resData = await res.json();
+        setDuplicatePairs(resData.pairs || []);
+        setDuplicatePairsCount(resData.count || 0);
+      }
+    } catch (err) {
+      console.error("Error fetching duplicate question pairs:", err);
+    } finally {
+      setLoadingDuplicates(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDuplicates();
+  }, [activeCourse, duplicateThreshold, includeOtherTypes]);
+
+  const handleDismissDuplicate = async (pair) => {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/admin/questions/duplicates/dismiss`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          university: activeCourse.university,
+          course_code: activeCourse.course_code,
+          question_id_a: pair.question_id_a,
+          question_id_b: pair.question_id_b,
+        }),
+      });
+      if (res.ok) {
+        setNotification({ type: "success", message: "Pair marked as 'Not a Duplicate'." });
+        fetchDuplicates();
+      }
+    } catch (err) {
+      setNotification({ type: "error", message: err.message });
+    }
+  };
+
   // Multi-selection
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -504,6 +568,12 @@ export default function CourseWorkspace({
             count: needsReviewCount,
             alert: needsReviewCount > 0,
           },
+          {
+            id: "duplicates",
+            label: "Duplicates",
+            count: duplicatePairsCount,
+            alert: duplicatePairsCount > 0,
+          },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -763,8 +833,138 @@ export default function CourseWorkspace({
         </div>
       )}
 
-      {/* Main Questions List Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      {/* Duplicates Tab View OR Main Questions Table */}
+      {activeTab === "duplicates" ? (
+        <div className="space-y-4">
+          {/* Controls Bar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/80 p-4 rounded-2xl border border-slate-800 backdrop-blur-sm">
+            <div className="flex flex-wrap items-center gap-6 text-xs">
+              <div className="flex items-center gap-3">
+                <label className="text-slate-400 font-semibold">
+                  Similarity Threshold: <strong className="text-indigo-400 font-mono text-sm">{Math.round(duplicateThreshold * 100)}%</strong>
+                </label>
+                <input
+                  type="range"
+                  min="0.50"
+                  max="0.95"
+                  step="0.05"
+                  value={duplicateThreshold}
+                  onChange={(e) => setDuplicateThreshold(parseFloat(e.target.value))}
+                  className="w-40 accent-indigo-500 cursor-pointer"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-slate-300 font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeOtherTypes}
+                  onChange={(e) => setIncludeOtherTypes(e.target.checked)}
+                  className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Include other types</span>
+              </label>
+            </div>
+
+            <div className="text-xs text-slate-400 font-mono">
+              Found <strong className="text-amber-400">{duplicatePairs.length}</strong> candidate pair{duplicatePairs.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+
+          {loadingDuplicates ? (
+            <div className="py-20 text-center text-xs text-slate-500 bg-slate-900 border border-slate-800 rounded-2xl">
+              <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Scanning table using trigram similarity index...
+            </div>
+          ) : duplicatePairs.length === 0 ? (
+            <div className="py-20 text-center text-xs text-slate-500 bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+              <p className="font-bold text-slate-300">No duplicate questions found!</p>
+              <p className="text-[11px] text-slate-500">
+                All question stems in this course are distinct at the {Math.round(duplicateThreshold * 100)}% threshold.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {duplicatePairs.map((pair, idx) => {
+                const simPct = Math.round((pair.similarity_score || 0) * 100);
+                return (
+                  <div
+                    key={`${pair.question_id_a}_${pair.question_id_b}_${idx}`}
+                    className={`p-4 rounded-2xl border transition space-y-3 ${
+                      pair.is_conflict
+                        ? "bg-rose-950/20 border-rose-500/40"
+                        : "bg-slate-900 border-slate-800"
+                    }`}
+                  >
+                    {/* Header Badges & Dismiss Action */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs border-b border-slate-800/80 pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                          {simPct}% Similarity
+                        </span>
+                        {pair.is_exact && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Exact Match
+                          </span>
+                        )}
+                        {pair.is_conflict && (
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 animate-pulse">
+                            <AlertTriangle className="w-4 h-4 text-rose-400" /> High Priority Conflict: Answers Differ!
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleDismissDuplicate(pair)}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold border border-slate-700 transition"
+                      >
+                        Not a Duplicate
+                      </button>
+                    </div>
+
+                    {/* Side-by-side comparison */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
+                      {/* Left Question A */}
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-indigo-400 text-xs">{pair.question_id_a}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
+                            {pair.type_a}
+                          </span>
+                        </div>
+                        <p className="text-white font-medium leading-relaxed">{pair.question_a}</p>
+                        {pair.correct_a && (
+                          <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-slate-800/60">
+                            Answer: <strong className="text-emerald-300">{pair.correct_a}</strong>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Question B */}
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-indigo-400 text-xs">{pair.question_id_b}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
+                            {pair.type_b}
+                          </span>
+                        </div>
+                        <p className="text-white font-medium leading-relaxed">{pair.question_b}</p>
+                        {pair.correct_b && (
+                          <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-slate-800/60">
+                            Answer: <strong className="text-emerald-300">{pair.correct_b}</strong>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Main Questions List Table */
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         {loading ? (
           <div className="py-20 text-center text-xs text-slate-500">
             <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
@@ -946,6 +1146,7 @@ export default function CourseWorkspace({
           </div>
         </div>
       </div>
+      )}
 
       {/* Slide-in Question Drawer */}
       <QuestionDrawer

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { deriveNextQuestionId, validateQuestion } from "../../lib/questionValidators";
 import { supabase } from "../../lib/supabaseClient";
+import { API_BASE_URL } from "../../config/apiConfig";
 
 export default function QuestionDrawer({
   isOpen,
@@ -55,6 +56,39 @@ export default function QuestionDrawer({
 
   const [validationErrors, setValidationErrors] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Advisory similar questions state
+  const [similarQuestions, setSimilarQuestions] = useState([]);
+
+  // Real-time debounced check for similar existing questions (500ms, >=15 chars)
+  useEffect(() => {
+    if (!isOpen || !activeCourse?.university || !activeCourse?.course_code || stem.trim().length < 15) {
+      setSimilarQuestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const token = session?.session?.access_token;
+        const params = new URLSearchParams({
+          university: activeCourse.university,
+          course_code: activeCourse.course_code,
+          stem: stem.trim(),
+        });
+        const res = await fetch(`${API_BASE_URL}/api/admin/questions/check-similar?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSimilarQuestions(data.similar || []);
+        }
+      } catch (err) {
+        console.warn("Error checking similar questions:", err);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [stem, isOpen, activeCourse]);
 
   // Fetch all existing IDs for active course to ensure accurate ID generation
   useEffect(() => {
@@ -422,6 +456,32 @@ export default function QuestionDrawer({
               placeholder="Enter the complete question prompt..."
               className="w-full p-3 bg-slate-900/80 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed text-xs"
             />
+
+            {/* Advisory Similar Questions Alert */}
+            {similarQuestions.length > 0 && (
+              <div className="mt-2.5 p-3 bg-amber-950/40 border border-amber-500/30 rounded-xl text-amber-200 text-xs space-y-1.5 animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  Similar Existing Question{similarQuestions.length > 1 ? "s" : ""} Found ({similarQuestions.length})
+                </div>
+                <ul className="space-y-1 font-mono text-[11px] divide-y divide-amber-900/40">
+                  {similarQuestions.map((item) => (
+                    <li key={item.question_id} className="pt-1 first:pt-0 flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-amber-400 mr-1.5">[{item.question_id}]</span>
+                        <span className="font-sans text-amber-100/90">{item.question}</span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300 font-mono text-[10px] font-bold shrink-0">
+                        {Math.round(item.similarity * 100)}% match
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-amber-400/80 italic font-sans pt-0.5">
+                  Advisory note: Check if this is a duplicate before creating a new entry. (Does not block saving)
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Type-Specific Editors */}
