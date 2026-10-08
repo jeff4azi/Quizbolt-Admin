@@ -16,7 +16,11 @@ import {
 import { API_BASE_URL } from "../../config/apiConfig";
 import { supabase } from "../../lib/supabaseClient";
 import { parseJson, parseCsv, parsePlainText } from "../../lib/questionParsers";
-import { validateQuestion, detectDuplicates, deriveNextQuestionId } from "../../lib/questionValidators";
+import {
+  validateQuestion,
+  detectDuplicates,
+  deriveNextQuestionId,
+} from "../../lib/questionValidators";
 
 export default function BulkImportWizard({
   isOpen,
@@ -40,9 +44,11 @@ export default function BulkImportWizard({
   const [format, setFormat] = useState("csv"); // 'csv', 'json', 'plaintext'
   const [rawText, setRawText] = useState("");
   const [parseError, setParseError] = useState("");
+  const [isParsing, setIsParsing] = useState(false);
 
   // Step 3: Parsed & Validated List
   const [previewQuestions, setPreviewQuestions] = useState([]);
+  const [previewFilter, setPreviewFilter] = useState("all"); // 'all', 'ready', 'skipped'
   const [validationSummary, setValidationSummary] = useState({
     total: 0,
     valid: 0,
@@ -53,6 +59,7 @@ export default function BulkImportWizard({
   // Step 4: Submission & Result
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importResult, setImportResult] = useState(null); // { inserted_count, skipped_count, batch_id }
+  const [skippedSummary, setSkippedSummary] = useState([]);
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoSuccess, setUndoSuccess] = useState(false);
 
@@ -74,12 +81,14 @@ export default function BulkImportWizard({
     reader.readAsText(file);
   };
 
-  const handleParseAndValidate = () => {
-    setParseError("");
+  const handleParseAndValidate = async () => {
     if (!rawText.trim()) {
       setParseError("Please paste or upload question data.");
       return;
     }
+
+    setIsParsing(true);
+    setParseError("");
 
     let parseRes;
     const defs = {
@@ -98,45 +107,84 @@ export default function BulkImportWizard({
 
     if (!parseRes.success) {
       setParseError(parseRes.error);
+      setIsParsing(false);
       return;
     }
 
-    // Assign IDs to questions lacking question_id
-    const existingIds = existingQuestions.map((q) => q.question_id);
+    // 1. Fetch ALL existing questions from DB for this course/university to prevent ID/stem overlaps
+    let dbQuestions = [];
+    try {
+      const targetUni = activeCourse?.university || defaults.university;
+      const targetCode = activeCourse?.course_code || defaults.course_code;
+
+      if (targetUni && targetCode) {
+        const { data, error } = await supabase
+          .from("questions")
+          .select("question_id, question, type")
+          .eq("university", targetUni)
+          .ilike("course_code", targetCode);
+
+        if (!error && Array.isArray(data)) {
+          dbQuestions = data;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch DB questions for duplicate check:", err);
+    }
+
+    // Combine database IDs with any props passed in
+    const allDbQuestionIds = dbQuestions
+      .map((q) => q.question_id)
+      .concat(existingQuestions.map((q) => q.question_id))
+      .filter(Boolean);
+
+    // 2. Assign IDs to questions lacking question_id sequentially from highest existing DB number
     let assignedList = [];
-    let currentExisting = [...existingIds];
+    let currentExistingIds = [...allDbQuestionIds];
 
     parseRes.questions.forEach((q) => {
       if (!q.question_id) {
         const nextId = deriveNextQuestionId(
-          currentExisting,
+          currentExistingIds,
           activeCourse?.course_code || defaults.course_code,
           q.type
         );
-        currentExisting.push(nextId);
+        currentExistingIds.push(nextId);
         assignedList.push({ ...q, question_id: nextId });
       } else {
-        currentExisting.push(q.question_id);
+        currentExistingIds.push(q.question_id);
         assignedList.push(q);
       }
     });
 
-    // Detect duplicates
-    const duplicateChecked = detectDuplicates(assignedList, existingQuestions);
+    // 3. Detect duplicates against complete database records
+    const duplicateChecked = detectDuplicates(assignedList, dbQuestions);
 
-    // Validate each question
     let validCount = 0;
     let invalidCount = 0;
     let duplicateCount = 0;
 
-    const validatedList = duplicateChecked.map((q) => {
+    const validatedList = duplicateChecked.map((q, idx) => {
       const { isValid, errors, warnings, flags } = validateQuestion(q);
-      if (q._isDuplicate) duplicateCount++;
-      if (isValid) validCount++;
-      else invalidCount++;
+      const isDuplicate = Boolean(q._isDuplicate);
+
+      let skipReason = null;
+      if (isDuplicate) {
+        skipReason = q._duplicateReason;
+        duplicateCount++;
+      } else if (!isValid) {
+        skipReason = errors.join("; ");
+        invalidCount++;
+      } else {
+        validCount++;
+      }
+
       return {
         ...q,
+        _rowIndex: idx + 1,
         _isValid: isValid,
+        _isDuplicate: isDuplicate,
+        _skipReason: skipReason,
         _errors: errors,
         _warnings: warnings,
         _flags: flags,
@@ -151,6 +199,7 @@ export default function BulkImportWizard({
       duplicates: duplicateCount,
     });
     setStep(3);
+    setIsParsing(false);
   };
 
   const handleExecuteImport = async () => {
@@ -160,28 +209,58 @@ export default function BulkImportWizard({
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      // Filter only questions with valid stems & options
-      const payloadQuestions = previewQuestions
-        .filter((q) => !q._isDuplicate)
-        .map(({ _isValid, _errors, _warnings, _flags, _isDuplicate, _duplicateReason, ...rest }) => rest);
+      // Filter ONLY valid ready questions (not duplicate and valid schema)
+      const validQuestionsToImport = previewQuestions.filter(
+        (q) => q._isValid && !q._isDuplicate
+      );
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/questions/bulk-import-rpc`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          questions: payloadQuestions,
-        }),
-      });
+      const skippedInPreview = previewQuestions.filter(
+        (q) => !q._isValid || q._isDuplicate
+      );
+
+      const payloadQuestions = validQuestionsToImport.map(
+        ({
+          _rowIndex,
+          _isValid,
+          _errors,
+          _warnings,
+          _flags,
+          _isDuplicate,
+          _duplicateReason,
+          _skipReason,
+          ...rest
+        }) => rest
+      );
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/questions/bulk-import-rpc`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            questions: payloadQuestions,
+          }),
+        }
+      );
 
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Bulk import failed.");
       }
 
-      setImportResult(data);
+      const totalSkipped =
+        (skippedInPreview.length || 0) + (data.skipped_count || 0);
+
+      setImportResult({
+        ...data,
+        inserted_count: data.inserted_count || 0,
+        skipped_count: totalSkipped,
+      });
+
+      setSkippedSummary(skippedInPreview);
       setStep(4);
       if (onImportComplete) onImportComplete();
     } catch (err) {
@@ -217,6 +296,12 @@ export default function BulkImportWizard({
       setIsUndoing(false);
     }
   };
+
+  const filteredPreviewQuestions = previewQuestions.filter((q) => {
+    if (previewFilter === "ready") return q._isValid && !q._isDuplicate;
+    if (previewFilter === "skipped") return !q._isValid || q._isDuplicate;
+    return true;
+  });
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -407,21 +492,55 @@ export default function BulkImportWizard({
               {/* Stat summary cards */}
               <div className="grid grid-cols-4 gap-3">
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Total Questions</span>
+                  <span className="text-slate-400 block text-[10px] font-semibold uppercase">Total Rows</span>
                   <span className="text-lg font-black text-white">{validationSummary.total}</span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-emerald-500/20">
-                  <span className="text-emerald-400 block text-[10px] font-semibold uppercase">Valid Ready</span>
+                  <span className="text-emerald-400 block text-[10px] font-semibold uppercase">Ready to Import</span>
                   <span className="text-lg font-black text-emerald-400">{validationSummary.valid}</span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-rose-500/20">
-                  <span className="text-rose-400 block text-[10px] font-semibold uppercase">Issues / Errors</span>
+                  <span className="text-rose-400 block text-[10px] font-semibold uppercase">Validation Errors</span>
                   <span className="text-lg font-black text-rose-400">{validationSummary.invalid}</span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-amber-500/20">
-                  <span className="text-amber-400 block text-[10px] font-semibold uppercase">Duplicates (Skipped)</span>
+                  <span className="text-amber-400 block text-[10px] font-semibold uppercase">Duplicates (Will Skip)</span>
                   <span className="text-lg font-black text-amber-400">{validationSummary.duplicates}</span>
                 </div>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-2 text-xs font-semibold">
+                <button
+                  onClick={() => setPreviewFilter("all")}
+                  className={`px-3 py-1 rounded-lg border transition ${
+                    previewFilter === "all"
+                      ? "bg-slate-800 text-white border-slate-700"
+                      : "text-slate-400 hover:text-slate-200 border-transparent"
+                  }`}
+                >
+                  All Rows ({previewQuestions.length})
+                </button>
+                <button
+                  onClick={() => setPreviewFilter("ready")}
+                  className={`px-3 py-1 rounded-lg border transition ${
+                    previewFilter === "ready"
+                      ? "bg-emerald-950/60 text-emerald-300 border-emerald-800/60"
+                      : "text-slate-400 hover:text-emerald-300 border-transparent"
+                  }`}
+                >
+                  Ready ({validationSummary.valid})
+                </button>
+                <button
+                  onClick={() => setPreviewFilter("skipped")}
+                  className={`px-3 py-1 rounded-lg border transition ${
+                    previewFilter === "skipped"
+                      ? "bg-amber-950/60 text-amber-300 border-amber-800/60"
+                      : "text-slate-400 hover:text-amber-300 border-transparent"
+                  }`}
+                >
+                  Skipped / Errors ({validationSummary.invalid + validationSummary.duplicates})
+                </button>
               </div>
 
               {/* Preview Table */}
@@ -429,16 +548,17 @@ export default function BulkImportWizard({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-800/60 sticky top-0 border-b border-slate-800 text-slate-400 uppercase text-[10px] font-semibold">
                     <tr>
+                      <th className="p-2.5 w-12 text-center">Row</th>
                       <th className="p-2.5">QID</th>
                       <th className="p-2.5">Type</th>
                       <th className="p-2.5">Question Stem</th>
-                      <th className="p-2.5">Status</th>
+                      <th className="p-2.5">Status & Reason</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/40">
-                    {previewQuestions.map((q, idx) => (
+                  <tbody className="divide-y divide-slate-800/40 font-mono">
+                    {filteredPreviewQuestions.map((q) => (
                       <tr
-                        key={idx}
+                        key={q._rowIndex}
                         className={`hover:bg-slate-800/30 ${
                           q._isDuplicate
                             ? "bg-amber-950/20"
@@ -447,7 +567,10 @@ export default function BulkImportWizard({
                             : ""
                         }`}
                       >
-                        <td className="p-2.5 font-mono font-bold text-indigo-400 text-[11px]">
+                        <td className="p-2.5 text-center text-slate-500 text-[11px]">
+                          #{q._rowIndex}
+                        </td>
+                        <td className="p-2.5 font-bold text-indigo-400 text-[11px]">
                           {q.question_id}
                         </td>
                         <td className="p-2.5">
@@ -455,21 +578,21 @@ export default function BulkImportWizard({
                             {q.type}
                           </span>
                         </td>
-                        <td className="p-2.5 max-w-md truncate text-slate-200">
+                        <td className="p-2.5 max-w-xs truncate text-slate-200 font-sans">
                           {q.question}
                         </td>
-                        <td className="p-2.5 text-[11px]">
+                        <td className="p-2.5 text-[11px] font-sans">
                           {q._isDuplicate ? (
-                            <span className="text-amber-400 font-semibold flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" /> Duplicate (Will Skip)
+                            <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/30 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 shrink-0" /> Skipped: {q._skipReason}
                             </span>
                           ) : !q._isValid ? (
-                            <span className="text-rose-400 font-semibold" title={q._errors.join(", ")}>
-                              Error: {q._errors[0]}
+                            <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 font-semibold border border-rose-500/30 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 shrink-0" /> Invalid: {q._skipReason}
                             </span>
                           ) : (
-                            <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Ready
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 shrink-0" /> Ready
                             </span>
                           )}
                         </td>
@@ -481,11 +604,11 @@ export default function BulkImportWizard({
             </div>
           )}
 
-          {/* STEP 4: Result & Undo */}
+          {/* STEP 4: Result & Summary */}
           {step === 4 && (
-            <div className="text-center py-8 space-y-4">
+            <div className="space-y-5 text-xs">
               {undoSuccess ? (
-                <div className="space-y-3">
+                <div className="text-center py-8 space-y-3">
                   <div className="w-16 h-16 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center mx-auto border border-slate-700">
                     <RotateCcw className="w-8 h-8 text-amber-400" />
                   </div>
@@ -501,27 +624,69 @@ export default function BulkImportWizard({
                   </button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
-                    <CheckCircle2 className="w-8 h-8" />
+                <div className="space-y-5">
+                  <div className="text-center space-y-2">
+                    <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
+                      <CheckCircle2 className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white">Import Finished</h3>
                   </div>
-                  <h3 className="text-lg font-bold text-white">Import Finished!</h3>
-                  <div className="flex justify-center gap-6 font-mono text-xs">
-                    <div>
-                      <span className="text-slate-400 block">Inserted</span>
-                      <span className="text-xl font-black text-emerald-400">
+
+                  {/* Metrics Cards */}
+                  <div className="grid grid-cols-2 gap-4 max-w-md mx-auto text-center font-mono">
+                    <div className="bg-emerald-950/40 border border-emerald-500/30 p-3.5 rounded-xl">
+                      <span className="text-emerald-400/80 block text-[11px] font-sans font-semibold uppercase">
+                        Successfully Inserted
+                      </span>
+                      <span className="text-2xl font-black text-emerald-400">
                         {importResult?.inserted_count || 0}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-slate-400 block">Skipped (Existing)</span>
-                      <span className="text-xl font-black text-amber-400">
+                    <div className="bg-amber-950/40 border border-amber-500/30 p-3.5 rounded-xl">
+                      <span className="text-amber-400/80 block text-[11px] font-sans font-semibold uppercase">
+                        Skipped Rows
+                      </span>
+                      <span className="text-2xl font-black text-amber-400">
                         {importResult?.skipped_count || 0}
                       </span>
                     </div>
                   </div>
 
-                  <div className="pt-4 flex items-center justify-center gap-3">
+                  {/* Detailed Skipped Breakdown Table */}
+                  {skippedSummary.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                        Skipped Rows Reason Breakdown ({skippedSummary.length})
+                      </h4>
+                      <div className="border border-slate-800 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="bg-slate-800/60 sticky top-0 border-b border-slate-800 text-slate-400 uppercase text-[10px] font-semibold">
+                            <tr>
+                              <th className="p-2 w-12 text-center">Row</th>
+                              <th className="p-2">QID</th>
+                              <th className="p-2">Question Stem</th>
+                              <th className="p-2">Reason Skipped</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/40 font-mono text-[11px]">
+                            {skippedSummary.map((q) => (
+                              <tr key={q._rowIndex} className="hover:bg-slate-800/30 bg-amber-950/10">
+                                <td className="p-2 text-center text-slate-500">#{q._rowIndex}</td>
+                                <td className="p-2 text-amber-400 font-bold">{q.question_id}</td>
+                                <td className="p-2 max-w-xs truncate text-slate-300 font-sans">
+                                  {q.question}
+                                </td>
+                                <td className="p-2 text-amber-300 font-sans">{q._skipReason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 flex items-center justify-center gap-3">
                     <button
                       disabled={isUndoing}
                       onClick={handleUndoImport}
@@ -580,10 +745,19 @@ export default function BulkImportWizard({
 
             {step === 2 && (
               <button
+                disabled={isParsing}
                 onClick={handleParseAndValidate}
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition"
               >
-                Parse & Validate <ArrowRight className="w-3.5 h-3.5" />
+                {isParsing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking Database...
+                  </>
+                ) : (
+                  <>
+                    Parse & Validate <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
               </button>
             )}
 
@@ -599,7 +773,8 @@ export default function BulkImportWizard({
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Import {validationSummary.valid} Questions
+                    Import {validationSummary.valid} Valid Question{validationSummary.valid !== 1 ? "s" : ""}{" "}
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </button>

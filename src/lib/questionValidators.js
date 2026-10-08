@@ -95,26 +95,46 @@ export const validateQuestion = (q) => {
  */
 export const detectDuplicates = (batch = [], existingQuestions = []) => {
   const seenStems = new Map();
-  const existingStems = new Set(
-    existingQuestions.map((q) => normalizeStem(q.question)).filter(Boolean)
-  );
+  const seenIds = new Set();
+
+  const existingStems = new Set();
+  const existingIds = new Set();
+
+  existingQuestions.forEach((q) => {
+    if (!q) return;
+    if (typeof q === "string") {
+      existingIds.add(q.toLowerCase().trim());
+    } else {
+      if (q.question_id) existingIds.add(String(q.question_id).toLowerCase().trim());
+      if (q.id) existingIds.add(String(q.id).toLowerCase().trim());
+      const stem = normalizeStem(q.question);
+      if (stem) existingStems.add(stem);
+    }
+  });
 
   return batch.map((q, index) => {
     const stem = normalizeStem(q.question);
+    const qId = (q.question_id || "").toLowerCase().trim();
     const duplicates = [];
 
-    if (!stem) {
-      return { ...q, _isDuplicate: false, _duplicateReason: null };
+    if (qId) {
+      if (existingIds.has(qId)) {
+        duplicates.push(`Question ID "${q.question_id}" already exists in database`);
+      } else if (seenIds.has(qId)) {
+        duplicates.push(`Duplicate Question ID "${q.question_id}" in this import batch`);
+      } else {
+        seenIds.add(qId);
+      }
     }
 
-    if (existingStems.has(stem)) {
-      duplicates.push("Exists in database");
-    }
-
-    if (seenStems.has(stem)) {
-      duplicates.push(`Duplicate of row #${seenStems.get(stem) + 1} in this import`);
-    } else {
-      seenStems.set(stem, index);
+    if (stem) {
+      if (existingStems.has(stem)) {
+        duplicates.push("Question stem already exists in database");
+      } else if (seenStems.has(stem)) {
+        duplicates.push(`Duplicate question stem of row #${seenStems.get(stem) + 1} in this import`);
+      } else {
+        seenStems.set(stem, index);
+      }
     }
 
     return {
