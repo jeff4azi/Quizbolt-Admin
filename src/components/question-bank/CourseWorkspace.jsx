@@ -25,6 +25,7 @@ import { API_BASE_URL } from "../../config/apiConfig";
 import { supabase } from "../../lib/supabaseClient";
 import QuestionDrawer from "./QuestionDrawer";
 import BulkImportWizard from "./BulkImportWizard";
+import ConfirmDialog from "../ConfirmDialog";
 
 export default function CourseWorkspace({
   activeCourse, // { course_code, university, title }
@@ -319,18 +320,39 @@ export default function CourseWorkspace({
     fetchCounts();
   };
 
+  // Custom confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState(null); // { title, message, onConfirm, variant }
+
   // Single delete question
-  const handleDeleteSingle = async (q) => {
-    if (!window.confirm(`Delete question "${q.question_id}"?`)) return;
-    executeDeleteWithUndo([q]);
+  const handleDeleteSingle = (q) => {
+    setConfirmDialog({
+      title: "Delete Question",
+      message: `Are you sure you want to delete question "${q.question_id}"?`,
+      detail: "This will be soft-deleted with a 10-second undo window.",
+      variant: "danger",
+      confirmLabel: "Delete",
+      onConfirm: () => {
+        setConfirmDialog(null);
+        executeDeleteWithUndo([q]);
+      },
+    });
   };
 
   // Bulk delete selected questions
   const handleBulkDelete = () => {
     const toDelete = questions.filter((q) => selectedIds.includes(q.id));
     if (toDelete.length === 0) return;
-    if (!window.confirm(`Delete ${toDelete.length} selected questions?`)) return;
-    executeDeleteWithUndo(toDelete);
+    setConfirmDialog({
+      title: `Delete ${toDelete.length} Questions`,
+      message: `Are you sure you want to delete ${toDelete.length} selected question${toDelete.length !== 1 ? "s" : ""}?`,
+      detail: "A 10-second undo window will be shown after deletion.",
+      variant: "danger",
+      confirmLabel: `Delete ${toDelete.length}`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        executeDeleteWithUndo(toDelete);
+      },
+    });
   };
 
   // 10-second client-side delete with undo
@@ -1172,6 +1194,20 @@ export default function CourseWorkspace({
           fetchCounts();
         }}
       />
+
+      {/* Custom Confirm Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setConfirmDialog(null)}
+          onConfirm={confirmDialog.onConfirm}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          detail={confirmDialog.detail}
+          variant={confirmDialog.variant || "danger"}
+          confirmLabel={confirmDialog.confirmLabel || "Confirm"}
+        />
+      )}
     </div>
   );
 }

@@ -50,7 +50,8 @@ export default function LeaderboardView() {
       setTimeout(() => setNotification(null), 4000);
       fetchSnapshot();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setNotification({ type: "error", text: `Error: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setRecomputing(false);
     }

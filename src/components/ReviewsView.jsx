@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { MessageSquare, Check, Trash2, X } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+import ConfirmDialog from "./ConfirmDialog";
 
 export default function ReviewsView() {
   const [reviews, setReviews] = useState([]);
@@ -51,12 +52,20 @@ export default function ReviewsView() {
       setTimeout(() => setNotification(null), 4000);
       fetchReviews();
     } catch (err) {
-      alert(`Error approving review: ${err.message}`);
+      setNotification({ type: "error", text: `Error approving review: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this review?")) return;
+  const [deleteReviewDialog, setDeleteReviewDialog] = useState(null);
+
+  const handleDelete = (id) => {
+    setDeleteReviewDialog(id);
+  };
+
+  const confirmDeleteReview = async () => {
+    const id = deleteReviewDialog;
+    setDeleteReviewDialog(null);
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
@@ -72,7 +81,8 @@ export default function ReviewsView() {
       setTimeout(() => setNotification(null), 4000);
       fetchReviews();
     } catch (err) {
-      alert(`Error deleting review: ${err.message}`);
+      setNotification({ type: "error", text: `Error deleting review: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -183,6 +193,20 @@ export default function ReviewsView() {
           ))
         )}
       </div>
+
+      {/* Delete Review Confirm Dialog */}
+      {deleteReviewDialog && (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setDeleteReviewDialog(null)}
+          onConfirm={confirmDeleteReview}
+          title="Delete Review"
+          message="Are you sure you want to permanently delete this review?"
+          detail="This action cannot be undone."
+          variant="danger"
+          confirmLabel="Delete Review"
+        />
+      )}
     </div>
   );
 }

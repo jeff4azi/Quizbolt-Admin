@@ -59,7 +59,8 @@ export default function NotificationsView() {
       setTimeout(() => setNotification(null), 4000);
       fetchTelemetry();
     } catch (err) {
-      alert(`Error sending broadcast: ${err.message}`);
+      setNotification({ type: "error", text: `Error sending broadcast: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 

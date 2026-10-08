@@ -37,6 +37,7 @@ export default function QuestionBank({
   const [search, setSearch] = useState("");
   const [selectedUni, setSelectedUni] = useState(initialUniversity || "");
   const [selectedLevel, setSelectedLevel] = useState("");
+  const [selectedSemester, setSelectedSemester] = useState("");
 
   // Fetch course counts from backend API
   const fetchCounts = async () => {
@@ -80,6 +81,7 @@ export default function QuestionBank({
       });
       if (selectedUni) params.append("university", selectedUni);
       if (selectedLevel) params.append("level", selectedLevel);
+      if (selectedSemester) params.append("semester", selectedSemester);
 
       const res = await fetch(`${API_BASE_URL}/api/admin/courses?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -124,7 +126,7 @@ export default function QuestionBank({
 
   useEffect(() => {
     fetchCourses();
-  }, [selectedUni, selectedLevel]);
+  }, [selectedUni, selectedLevel, selectedSemester]);
 
   // Handle external initialCourseCode change
   useEffect(() => {
@@ -209,7 +211,7 @@ export default function QuestionBank({
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800 backdrop-blur-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800 backdrop-blur-sm">
         <div className="relative">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
           <input
@@ -247,6 +249,17 @@ export default function QuestionBank({
           <option value="300">300 Level</option>
           <option value="400">400 Level</option>
           <option value="500">500 Level</option>
+        </select>
+
+        {/* Semester Selector */}
+        <select
+          value={selectedSemester}
+          onChange={(e) => setSelectedSemester(e.target.value)}
+          className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        >
+          <option value="">All Semesters</option>
+          <option value="1">1st Semester</option>
+          <option value="2">2nd Semester</option>
         </select>
       </div>
 

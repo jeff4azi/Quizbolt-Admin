@@ -199,7 +199,8 @@ export default function PremiumView() {
         fetchCodes();
       }
     } catch (err) {
-      alert(`Error generating codes: ${err.message}`);
+      setNotification({ type: "error", text: `Error generating codes: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -229,7 +230,8 @@ export default function PremiumView() {
       setTimeout(() => setNotification(null), 5000);
       fetchCodes();
     } catch (err) {
-      alert(`Error revoking premium: ${err.message}`);
+      setNotification({ type: "error", text: `Error revoking premium: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsRevoking(false);
     }
@@ -269,7 +271,8 @@ export default function PremiumView() {
       setTimeout(() => setNotification(null), 5000);
       fetchCodes();
     } catch (err) {
-      alert(`Error deleting codes: ${err.message}`);
+      setNotification({ type: "error", text: `Error deleting codes: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsDeletingCodes(false);
     }

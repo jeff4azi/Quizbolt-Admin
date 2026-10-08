@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FileText, Plus, Trash2, Edit2, X, Check } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+import ConfirmDialog from "./ConfirmDialog";
 
 export default function ContentCmsView() {
   const [faqs, setFaqs] = useState([]);
@@ -10,6 +11,7 @@ export default function ContentCmsView() {
   const [editingFaq, setEditingFaq] = useState(null);
   const [faqForm, setFaqForm] = useState({ question: "", answer: "", category: "General" });
   const [notification, setNotification] = useState(null);
+  const [deleteFaqDialog, setDeleteFaqDialog] = useState({ isOpen: false, id: null });
 
   const fetchFaqs = async () => {
     setLoading(true);
@@ -62,12 +64,20 @@ export default function ContentCmsView() {
       setTimeout(() => setNotification(null), 4000);
       fetchFaqs();
     } catch (err) {
-      alert(`Error saving FAQ: ${err.message}`);
+      setNotification({ type: "error", text: `Error saving FAQ: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
-  const handleDeleteFaq = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this FAQ entry?")) return;
+  const handleDeleteFaq = (id) => {
+    setDeleteFaqDialog({ isOpen: true, id });
+  };
+
+  const confirmDeleteFaq = async () => {
+    const id = deleteFaqDialog.id;
+    setDeleteFaqDialog({ isOpen: false, id: null });
+    if (!id) return;
+
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
@@ -83,7 +93,8 @@ export default function ContentCmsView() {
       setTimeout(() => setNotification(null), 4000);
       fetchFaqs();
     } catch (err) {
-      alert(`Error deleting FAQ: ${err.message}`);
+      setNotification({ type: "error", text: `Error deleting FAQ: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -230,6 +241,18 @@ export default function ContentCmsView() {
           </div>
         </div>
       )}
+
+      {/* Confirm FAQ Deletion Dialog */}
+      <ConfirmDialog
+        isOpen={deleteFaqDialog.isOpen}
+        title="Delete FAQ Entry"
+        message="Are you sure you want to permanently delete this FAQ item? This cannot be undone."
+        confirmLabel="Delete FAQ"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={confirmDeleteFaq}
+        onCancel={() => setDeleteFaqDialog({ isOpen: false, id: null })}
+      />
     </div>
   );
 }

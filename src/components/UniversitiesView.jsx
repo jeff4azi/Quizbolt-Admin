@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { GraduationCap, AlertTriangle, Plus, Edit2, Trash2, X, Check, RefreshCw } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
+import ConfirmDialog from "./ConfirmDialog";
 
 export default function UniversitiesView() {
   const [universities, setUniversities] = useState([]);
@@ -118,9 +119,15 @@ export default function UniversitiesView() {
     }
   };
 
-  const handleDeleteUniversity = async (uni) => {
-    if (!window.confirm(`Are you sure you want to delete university '${uni.name} (${uni.id})'?`)) return;
+  const [deleteUniDialog, setDeleteUniDialog] = useState(null);
 
+  const handleDeleteUniversity = (uni) => {
+    setDeleteUniDialog(uni);
+  };
+
+  const confirmDeleteUniversity = async () => {
+    const uni = deleteUniDialog;
+    setDeleteUniDialog(null);
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
@@ -137,7 +144,8 @@ export default function UniversitiesView() {
       setTimeout(() => setNotification(null), 4000);
       fetchUniversities();
     } catch (err) {
-      alert(`Deletion Denied:\n${err.message}`);
+      setNotification({ type: "error", text: `Deletion Denied: ${err.message}` });
+      setTimeout(() => setNotification(null), 6000);
     }
   };
 
@@ -170,7 +178,8 @@ export default function UniversitiesView() {
       setTimeout(() => setNotification(null), 4000);
       fetchUniversities();
     } catch (err) {
-      alert(`Error updating semester: ${err.message}`);
+      setNotification({ type: "error", text: `Error updating semester: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -414,6 +423,20 @@ export default function UniversitiesView() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Delete University Confirm Dialog */}
+      {deleteUniDialog && (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setDeleteUniDialog(null)}
+          onConfirm={confirmDeleteUniversity}
+          title="Delete University"
+          message={`Are you sure you want to delete '${deleteUniDialog.name} (${deleteUniDialog.id})'?`}
+          detail="This action cannot be undone. All associated colleges and courses may be affected."
+          variant="danger"
+          confirmLabel="Delete University"
+        />
       )}
     </div>
   );

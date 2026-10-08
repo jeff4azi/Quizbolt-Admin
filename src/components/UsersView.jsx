@@ -3,6 +3,7 @@ import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCir
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 import { useUniversities, useColleges } from "../hooks/useUniversitiesAndColleges";
+import ConfirmDialog from "./ConfirmDialog";
 
 // profiles.year is a NOT NULL smallint storing 1-4 (NOT literally
 // 100/200/300/400) — there is no 400+1 "500 Level", year 4 is the final year.
@@ -173,12 +174,21 @@ export default function UsersView() {
       setTimeout(() => setNotification(null), 4000);
       fetchUsers();
     } catch (err) {
-      alert(`Error updating user: ${err.message}`);
+      setNotification({ type: "error", text: `Error updating user: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
-  const handleDeleteUser = async (id, name) => {
-    if (!window.confirm(`CAUTION: Are you sure you want to permanently delete user "${name || id}" and all their attempt records?`)) return;
+  const [deleteUserDialog, setDeleteUserDialog] = useState(null);
+
+  const handleDeleteUser = (id, name) => {
+    setDeleteUserDialog({ id, name });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteUserDialog) return;
+    const { id, name } = deleteUserDialog;
+    setDeleteUserDialog(null);
 
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -195,7 +205,8 @@ export default function UsersView() {
       setTimeout(() => setNotification(null), 4000);
       fetchUsers();
     } catch (err) {
-      alert(`Error deleting user: ${err.message}`);
+      setNotification({ type: "error", text: `Error deleting user: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -218,7 +229,8 @@ export default function UsersView() {
       setTimeout(() => setNotification(null), 5000);
       fetchUsers();
     } catch (err) {
-      alert(`Error clearing favourites: ${err.message}`);
+      setNotification({ type: "error", text: `Error clearing favourites: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsClearingFavs(false);
     }
@@ -247,7 +259,8 @@ export default function UsersView() {
       fetchUsers();
       fetchUndoStatus();
     } catch (err) {
-      alert(`Error promoting levels: ${err.message}`);
+      setNotification({ type: "error", text: `Error promoting levels: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsIncrementingLevel(false);
     }
@@ -276,7 +289,8 @@ export default function UsersView() {
       setTimeout(() => setNotification(null), 5000);
       fetchUsers();
     } catch (err) {
-      alert(`Error undoing promotion: ${err.message}`);
+      setNotification({ type: "error", text: `Error undoing promotion: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsUndoingLevel(false);
     }
@@ -343,7 +357,8 @@ export default function UsersView() {
         : grantReasonText.trim();
 
     if (!reason) {
-      alert("Please provide a reason for the grant.");
+      setNotification({ type: "error", text: "Please provide a reason for the grant." });
+      setTimeout(() => setNotification(null), 4000);
       return;
     }
 
@@ -379,7 +394,8 @@ export default function UsersView() {
       setTimeout(() => setNotification(null), 5000);
       fetchUsers();
     } catch (err) {
-      alert(`Error granting premium days: ${err.message}`);
+      setNotification({ type: "error", text: `Error granting premium days: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setGrantLoading(false);
     }
@@ -1032,6 +1048,20 @@ export default function UsersView() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Delete User Confirm Dialog */}
+      {deleteUserDialog && (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setDeleteUserDialog(null)}
+          onConfirm={confirmDeleteUser}
+          title="Delete User Account"
+          message={`Are you sure you want to permanently delete user "${deleteUserDialog.name || deleteUserDialog.id}" and all their attempt records?`}
+          detail="This action cannot be undone."
+          variant="danger"
+          confirmLabel="Yes, Delete User"
+        />
       )}
     </div>
   );

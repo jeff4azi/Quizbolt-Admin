@@ -59,7 +59,8 @@ export default function AdminUsersView() {
       setTimeout(() => setNotification(null), 4000);
       fetchAdmins();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setNotification({ type: "error", text: `Error: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -81,7 +82,8 @@ export default function AdminUsersView() {
 
       fetchAdmins();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setNotification({ type: "error", text: `Error: ${err.message}` });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
