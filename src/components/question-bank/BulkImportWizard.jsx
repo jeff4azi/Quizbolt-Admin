@@ -12,6 +12,7 @@ import {
   Sparkles,
   Layers,
   Info,
+  Plus,
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
 import { supabase } from "../../lib/supabaseClient";
@@ -174,13 +175,13 @@ export default function BulkImportWizard({
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      // Filter ONLY valid ready questions (not duplicate and valid schema)
+      // Filter: ready rows + user-overridden duplicate rows (admin said "include anyway")
       const validQuestionsToImport = previewQuestions.filter(
-        (q) => q._isValid && !q._isDuplicate
+        (q) => (q._isValid && !q._isDuplicate) || q._userOverridden
       );
 
       const skippedInPreview = previewQuestions.filter(
-        (q) => !q._isValid || q._isDuplicate
+        (q) => (!q._isValid || q._isDuplicate) && !q._userOverridden
       );
 
       const payloadQuestions = validQuestionsToImport.map(
@@ -193,6 +194,9 @@ export default function BulkImportWizard({
           _isDuplicate,
           _duplicateReason,
           _skipReason,
+          _userOverridden,
+          _duplicateDetails,
+          _isConflict,
           ...rest
         }) => rest
       );
@@ -469,8 +473,19 @@ export default function BulkImportWizard({
                   <span className="text-lg font-black text-rose-400">{validationSummary.invalid}</span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-amber-500/20">
-                  <span className="text-amber-400 block text-[10px] font-semibold uppercase">Duplicates (Will Skip)</span>
-                  <span className="text-lg font-black text-amber-400">{validationSummary.duplicates}</span>
+                  <span className="text-amber-400 block text-[10px] font-semibold uppercase">
+                    Duplicates (Will Skip)
+                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-black text-amber-400">
+                      {previewQuestions.filter((q) => q._isDuplicate && !q._userOverridden).length}
+                    </span>
+                    {previewQuestions.some((q) => q._userOverridden) && (
+                      <span className="text-[10px] text-emerald-400 font-semibold">
+                        ({previewQuestions.filter((q) => q._userOverridden).length} overridden)
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -518,6 +533,7 @@ export default function BulkImportWizard({
                       <th className="p-2.5">Type</th>
                       <th className="p-2.5">Question Stem</th>
                       <th className="p-2.5">Status & Reason</th>
+                      <th className="p-2.5 w-8"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/40 font-mono">
@@ -525,7 +541,9 @@ export default function BulkImportWizard({
                       <tr
                         key={q._rowIndex}
                         className={`hover:bg-slate-800/30 ${
-                          q._isDuplicate
+                          q._userOverridden
+                            ? "bg-emerald-950/20"
+                            : q._isDuplicate
                             ? "bg-amber-950/20"
                             : !q._isValid
                             ? "bg-rose-950/20"
@@ -547,7 +565,11 @@ export default function BulkImportWizard({
                           {q.question}
                         </td>
                         <td className="p-2.5 text-[11px] font-sans">
-                          {q._isDuplicate ? (
+                          {q._userOverridden ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 shrink-0" /> Overridden — Will Import
+                            </span>
+                          ) : q._isDuplicate ? (
                             <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/30 flex items-center gap-1">
                               <AlertTriangle className="w-3 h-3 shrink-0" /> Skipped: {q._skipReason}
                             </span>
@@ -559,6 +581,25 @@ export default function BulkImportWizard({
                             <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3 shrink-0" /> Ready
                             </span>
+                          )}
+                        </td>
+                        {/* Override toggle — only shown for duplicate rows, not schema-invalid ones */}
+                        <td className="p-2.5 text-center">
+                          {q._isDuplicate && (
+                            <button
+                              type="button"
+                              title={q._userOverridden ? "Undo override — skip this row" : "Override: force-include despite duplicate detection"}
+                              onClick={() => toggleOverrideDuplicate(q._rowIndex)}
+                              className={`p-1 rounded-lg border transition ${
+                                q._userOverridden
+                                  ? "bg-emerald-600/20 border-emerald-500/50 text-emerald-300 hover:bg-rose-950/40 hover:border-rose-500/40 hover:text-rose-300"
+                                  : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-emerald-950/40 hover:border-emerald-500/40 hover:text-emerald-300"
+                              }`}
+                            >
+                              {q._userOverridden
+                                ? <CheckCircle2 className="w-3.5 h-3.5" />
+                                : <Plus className="w-3.5 h-3.5" />}
+                            </button>
                           )}
                         </td>
                       </tr>
@@ -726,24 +767,32 @@ export default function BulkImportWizard({
               </button>
             )}
 
-            {step === 3 && (
-              <button
-                disabled={isSubmitting || validationSummary.valid === 0}
-                onClick={handleExecuteImport}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Importing...
-                  </>
-                ) : (
-                  <>
-                    Import {validationSummary.valid} Valid Question{validationSummary.valid !== 1 ? "s" : ""}{" "}
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
-            )}
+            {step === 3 && (() => {
+              const overriddenCount = previewQuestions.filter((q) => q._userOverridden).length;
+              const readyCount = previewQuestions.filter((q) => q._isValid && !q._isDuplicate).length;
+              const totalWillImport = readyCount + overriddenCount;
+              return (
+                <button
+                  disabled={isSubmitting || totalWillImport === 0}
+                  onClick={handleExecuteImport}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Importing...
+                    </>
+                  ) : (
+                    <>
+                      Import {totalWillImport} Question{totalWillImport !== 1 ? "s" : ""}
+                      {overriddenCount > 0 && (
+                        <span className="ml-1 text-emerald-300 font-semibold">({overriddenCount} override{overriddenCount !== 1 ? "s" : ""})</span>
+                      )}
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         )}
       </div>
