@@ -33,6 +33,7 @@ export default function QuestionDrawer({
   const [difficulty, setDifficulty] = useState("medium");
   const [section, setSection] = useState("");
   const [reason, setReason] = useState("");
+  const [hint, setHint] = useState("");
   const [courseQuestionIds, setCourseQuestionIds] = useState([]);
 
   // Objective state
@@ -130,6 +131,7 @@ export default function QuestionDrawer({
       setDifficulty(question.difficulty || "medium");
       setSection(question.section || "");
       setReason(question.reason || "");
+      setHint(question.hint || "");
 
       // Objective
       if (Array.isArray(question.options)) {
@@ -172,6 +174,7 @@ export default function QuestionDrawer({
       setDifficulty("medium");
       setSection("");
       setReason("");
+      setHint("");
       setOptions(["", "", "", ""]);
       setCorrect("");
       setModelAnswer("");
@@ -290,6 +293,7 @@ export default function QuestionDrawer({
       type,
       question: stem.trim(),
       reason: reason.trim() || null,
+      hint: hint.trim() || null,
       difficulty,
       section: section.trim() || null,
       options: null,
@@ -729,6 +733,25 @@ export default function QuestionDrawer({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Why is this answer correct? Explanations appear for students during review."
+              className="w-full p-3 bg-slate-900/80 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed text-xs"
+            />
+          </div>
+
+          {/* Hint / Clue */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                Hint / Clue (Optional)
+              </label>
+              <span className="text-[10px] text-slate-500">
+                Revealed on-demand to students during exams / practice
+              </span>
+            </div>
+            <textarea
+              rows={2}
+              value={hint}
+              onChange={(e) => setHint(e.target.value)}
+              placeholder="e.g. Think about the connection to OSI Layer 3 / Remember the keyword in the prompt"
               className="w-full p-3 bg-slate-900/80 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed text-xs"
             />
           </div>

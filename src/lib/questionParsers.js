@@ -68,6 +68,7 @@ export const sanitizeQuestion = (raw, defaults = {}) => {
     options: Array.isArray(options) ? options : null,
     correct: raw.correct ? String(raw.correct).trim() : null,
     reason: raw.reason ? String(raw.reason).trim() : null,
+    hint: raw.hint ? String(raw.hint).trim() : null,
     difficulty: raw.difficulty ? String(raw.difficulty).trim().toLowerCase() : defaults.difficulty || "medium",
     section: raw.section ? String(raw.section).trim() : defaults.section || null,
     match_prompt: raw.match_prompt ? String(raw.match_prompt).trim() : null,
@@ -155,6 +156,7 @@ export const parseCsv = (text, defaults = {}) => {
         options: row.options ? row.options.split("|").map((o) => o.trim()) : undefined,
         correct: row.correct || row.answer,
         reason: row.reason || row.explanation,
+        hint: row.hint || row.clue,
         difficulty: row.difficulty || defaults.difficulty,
         section: row.section || row.topic || defaults.section,
         model_answer: row.model_answer || row.solution,
@@ -180,6 +182,7 @@ export const parseCsv = (text, defaults = {}) => {
  * D) Berlin
  * Answer: A
  * Explanation: Paris is the capital.
+ * Hint: Think of the Eiffel Tower.
  */
 export const parsePlainText = (text, defaults = {}) => {
   try {
@@ -198,6 +201,7 @@ export const parsePlainText = (text, defaults = {}) => {
       const options = [];
       let correct = null;
       let reason = null;
+      let hint = null;
       let type = "objective";
       let model_answer = null;
 
@@ -228,6 +232,14 @@ export const parsePlainText = (text, defaults = {}) => {
         if (expMatch) {
           inStem = false;
           reason = expMatch[1].trim();
+          continue;
+        }
+
+        // Check for Hint / Clue
+        const hintMatch = line.match(/^(?:Hint|Clue)\s*[:=-]\s*(.+)$/i);
+        if (hintMatch) {
+          inStem = false;
+          hint = hintMatch[1].trim();
           continue;
         }
 
@@ -275,6 +287,7 @@ export const parsePlainText = (text, defaults = {}) => {
               options: options.length > 0 ? options : null,
               correct,
               reason,
+              hint,
               model_answer,
             },
             defaults
