@@ -16,6 +16,7 @@ import NotificationsView from "./components/NotificationsView";
 import ContentCmsView from "./components/ContentCmsView";
 import AdminUsersView from "./components/AdminUsersView";
 import AuditLogView from "./components/AuditLogView";
+import AdsView from "./components/AdsView";
 import { RefreshCw, Menu } from "lucide-react";
 
 export default function App() {
@@ -58,12 +59,14 @@ export default function App() {
 
     checkAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_OUT" || !session) {
-        setUser(null);
-        setAdminRecord(null);
-      }
-    });
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_OUT" || !session) {
+          setUser(null);
+          setAdminRecord(null);
+        }
+      },
+    );
 
     return () => {
       authListener?.subscription?.unsubscribe();
@@ -94,7 +97,9 @@ export default function App() {
     return (
       <div className="h-screen bg-slate-950 text-slate-400 flex flex-col items-center justify-center gap-3 font-sans">
         <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
-        <span className="text-xs font-semibold">Initializing QuizBolt Admin...</span>
+        <span className="text-xs font-semibold">
+          Initializing QuizBolt Admin...
+        </span>
       </div>
     );
   }
@@ -139,12 +144,16 @@ export default function App() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-black text-white tracking-tight">QuizBolt Admin</span>
+          <span className="text-sm font-black text-white tracking-tight">
+            QuizBolt Admin
+          </span>
         </div>
 
         {/* Scrollable view area */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-950">
-          {activeTab === "dashboard" && <DashboardView onNavigate={handleTabChange} />}
+          {activeTab === "dashboard" && (
+            <DashboardView onNavigate={handleTabChange} />
+          )}
           {activeTab === "users" && <UsersView />}
           {activeTab === "universities" && <UniversitiesView />}
           {activeTab === "courses" && (
@@ -170,6 +179,7 @@ export default function App() {
           {activeTab === "leaderboard" && <LeaderboardView />}
           {activeTab === "analytics" && <AnalyticsView />}
           {activeTab === "notifications" && <NotificationsView />}
+          {activeTab === "ads" && <AdsView />}
           {activeTab === "cms" && <ContentCmsView />}
           {activeTab === "admins" && <AdminUsersView />}
           {activeTab === "audit" && <AuditLogView />}

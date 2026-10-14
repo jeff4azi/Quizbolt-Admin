@@ -1,16 +1,41 @@
 import React from "react";
 import {
-  LayoutDashboard, Users, GraduationCap, BookOpen, HelpCircle,
-  Crown, MessageSquare, FileText, ShieldCheck, LogOut, ChevronRight,
-  Share2, Award, BarChart3, Bell, Shield, X
+  LayoutDashboard,
+  Users,
+  GraduationCap,
+  BookOpen,
+  HelpCircle,
+  Crown,
+  MessageSquare,
+  FileText,
+  ShieldCheck,
+  LogOut,
+  ChevronRight,
+  Share2,
+  Award,
+  BarChart3,
+  Bell,
+  Shield,
+  X,
+  Megaphone,
 } from "lucide-react";
 import Logo from "../images/Logo";
 
-export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout, onClose }) {
+export default function Sidebar({
+  activeTab,
+  setActiveTab,
+  adminRecord,
+  onLogout,
+  onClose,
+}) {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "users", label: "Users & Overrides", icon: Users },
-    { id: "universities", label: "Universities & Colleges", icon: GraduationCap },
+    {
+      id: "universities",
+      label: "Universities & Colleges",
+      icon: GraduationCap,
+    },
     { id: "courses", label: "Courses Management", icon: BookOpen },
     { id: "questions", label: "Question Bank", icon: HelpCircle },
     { id: "premium", label: "Monetization & Codes", icon: Crown },
@@ -19,6 +44,7 @@ export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout
     { id: "leaderboard", label: "Leaderboards", icon: Award },
     { id: "analytics", label: "Analytics & Telemetry", icon: BarChart3 },
     { id: "notifications", label: "Push Notifications", icon: Bell },
+    { id: "ads", label: "Ad Campaigns", icon: Megaphone },
     { id: "cms", label: "Content & Legal CMS", icon: FileText },
     { id: "admins", label: "Admin Staff & Roles", icon: Shield },
     { id: "audit", label: "Audit Trail Log", icon: ShieldCheck },
@@ -31,8 +57,12 @@ export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout
         <div className="flex items-center gap-3 px-2 py-1 sticky top-0 bg-[#0B0F17] z-10 pb-2 border-b border-slate-800/60">
           <Logo className="w-10 h-10 shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="font-black text-base text-white tracking-tight leading-none">QuizBolt</div>
-            <div className="text-[11px] font-semibold text-indigo-400 mt-1 uppercase tracking-wider">Admin Control</div>
+            <div className="font-black text-base text-white tracking-tight leading-none">
+              QuizBolt
+            </div>
+            <div className="text-[11px] font-semibold text-indigo-400 mt-1 uppercase tracking-wider">
+              Admin Control
+            </div>
           </div>
           {onClose && (
             <button
@@ -60,10 +90,14 @@ export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`} />
+                  <Icon
+                    className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`}
+                  />
                   <span>{item.label}</span>
                 </div>
-                {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-80 shrink-0" />}
+                {isActive && (
+                  <ChevronRight className="w-3.5 h-3.5 opacity-80 shrink-0" />
+                )}
               </button>
             );
           })}
@@ -74,7 +108,9 @@ export default function Sidebar({ activeTab, setActiveTab, adminRecord, onLogout
       <div className="pt-3 border-t border-slate-800/80 space-y-2.5 shrink-0 bg-[#0B0F17]">
         <div className="p-2.5 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between">
           <div className="overflow-hidden">
-            <div className="text-xs font-bold text-white truncate">{adminRecord?.email}</div>
+            <div className="text-xs font-bold text-white truncate">
+              {adminRecord?.email}
+            </div>
             <div className="text-[10px] font-semibold text-indigo-400 mt-0.5 inline-block px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded">
               {adminRecord?.role || "Admin"}
             </div>
