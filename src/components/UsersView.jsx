@@ -1,8 +1,32 @@
 import React, { useState, useEffect } from "react";
-import { Search, Users, Shield, Crown, Trash2, Edit2, X, Check, Filter, AlertCircle, ChevronLeft, ChevronRight, HeartOff, AlertTriangle, RefreshCw, TrendingUp, Undo2, GraduationCap, BookOpen, Gift } from "lucide-react";
+import {
+  Search,
+  Users,
+  Shield,
+  Crown,
+  Trash2,
+  Edit2,
+  X,
+  Check,
+  Filter,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  HeartOff,
+  AlertTriangle,
+  RefreshCw,
+  TrendingUp,
+  Undo2,
+  GraduationCap,
+  BookOpen,
+  Gift,
+} from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
-import { useUniversities, useColleges } from "../hooks/useUniversitiesAndColleges";
+import {
+  useUniversities,
+  useColleges,
+} from "../hooks/useUniversitiesAndColleges";
 import ConfirmDialog from "./ConfirmDialog";
 
 // profiles.year is a NOT NULL smallint storing 1-4 (NOT literally
@@ -13,7 +37,12 @@ const LEVEL_OPTIONS = [
   { value: "3", label: "300 Level" },
   { value: "4", label: "400 Level" },
 ];
-const LEVEL_LABELS = { 1: "100 Level", 2: "200 Level", 3: "300 Level", 4: "400 Level" };
+const LEVEL_LABELS = {
+  1: "100 Level",
+  2: "200 Level",
+  3: "300 Level",
+  4: "400 Level",
+};
 const formatLevel = (year) => LEVEL_LABELS[Number(year)] || `Year ${year}`;
 
 export default function UsersView() {
@@ -40,7 +69,8 @@ export default function UsersView() {
   const [isClearingFavs, setIsClearingFavs] = useState(false);
 
   // Increment Level Modal State
-  const [isIncrementLevelModalOpen, setIsIncrementLevelModalOpen] = useState(false);
+  const [isIncrementLevelModalOpen, setIsIncrementLevelModalOpen] =
+    useState(false);
   const [isIncrementingLevel, setIsIncrementingLevel] = useState(false);
 
   // Undo Promotion State
@@ -68,7 +98,8 @@ export default function UsersView() {
     year: "1",
     is_premium: false,
   });
-  const { colleges: editColleges } = useColleges(editForm.university);
+  const { colleges: editColleges, loadingColleges: editCollegesLoading } =
+    useColleges(editForm.university);
 
   const [notification, setNotification] = useState(null);
 
@@ -89,7 +120,7 @@ export default function UsersView() {
       if (yearFilter) params.append("year", yearFilter);
 
       const res = await fetch(`${API_BASE_URL}/api/admin/users?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.ok) {
@@ -114,9 +145,12 @@ export default function UsersView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/users/increment-levels/undo-status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/increment-levels/undo-status`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       if (res.ok) {
         const data = await res.json();
@@ -144,7 +178,9 @@ export default function UsersView() {
     setEditForm({
       full_name: user.full_name || "",
       user_name: user.user_name || "",
-      university: user.university || "",
+      // profiles.university is stored uppercase ("TASUED") but universities.id
+      // is lowercase ("tasued") — normalise to lowercase so the select matches.
+      university: user.university ? user.university.trim().toLowerCase() : "",
       college: user.college || "",
       department: user.department || "",
       year: user.year ? String(user.year) : "1",
@@ -158,23 +194,32 @@ export default function UsersView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/users/${selectedUser.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/${selectedUser.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(editForm),
         },
-        body: JSON.stringify(editForm),
-      });
+      );
 
       if (!res.ok) throw new Error("Failed to update user profile");
 
       setSelectedUser(null);
-      setNotification({ type: "success", text: "User profile updated successfully!" });
+      setNotification({
+        type: "success",
+        text: "User profile updated successfully!",
+      });
       setTimeout(() => setNotification(null), 4000);
       fetchUsers();
     } catch (err) {
-      setNotification({ type: "error", text: `Error updating user: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error updating user: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     }
   };
@@ -201,11 +246,17 @@ export default function UsersView() {
 
       if (!res.ok) throw new Error("Failed to delete user");
 
-      setNotification({ type: "success", text: `User ${name || id} deleted successfully.` });
+      setNotification({
+        type: "success",
+        text: `User ${name || id} deleted successfully.`,
+      });
       setTimeout(() => setNotification(null), 4000);
       fetchUsers();
     } catch (err) {
-      setNotification({ type: "error", text: `Error deleting user: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error deleting user: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     }
   };
@@ -216,20 +267,30 @@ export default function UsersView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/users/clear-all-favourites`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/clear-all-favourites`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to clear favourite courses");
+      if (!res.ok)
+        throw new Error(data.message || "Failed to clear favourite courses");
 
       setIsClearFavsModalOpen(false);
-      setNotification({ type: "success", text: "Successfully cleared favourite courses for ALL users on the platform!" });
+      setNotification({
+        type: "success",
+        text: "Successfully cleared favourite courses for ALL users on the platform!",
+      });
       setTimeout(() => setNotification(null), 5000);
       fetchUsers();
     } catch (err) {
-      setNotification({ type: "error", text: `Error clearing favourites: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error clearing favourites: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsClearingFavs(false);
@@ -242,24 +303,33 @@ export default function UsersView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/users/increment-levels`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/increment-levels`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to promote user levels");
+      if (!res.ok)
+        throw new Error(data.message || "Failed to promote user levels");
 
       setIsIncrementLevelModalOpen(false);
       setNotification({
         type: "success",
-        text: data.message || `Successfully promoted ${data.updatedCount} users to their next level!`,
+        text:
+          data.message ||
+          `Successfully promoted ${data.updatedCount} users to their next level!`,
       });
       setTimeout(() => setNotification(null), 5000);
       fetchUsers();
       fetchUndoStatus();
     } catch (err) {
-      setNotification({ type: "error", text: `Error promoting levels: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error promoting levels: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsIncrementingLevel(false);
@@ -272,24 +342,33 @@ export default function UsersView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/users/increment-levels/undo`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/increment-levels/undo`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to undo level promotion");
+      if (!res.ok)
+        throw new Error(data.message || "Failed to undo level promotion");
 
       setIsUndoModalOpen(false);
       setUndoStatus(null);
       setNotification({
         type: "success",
-        text: data.message || `Successfully reverted ${data.revertedCount} users to their previous level!`,
+        text:
+          data.message ||
+          `Successfully reverted ${data.revertedCount} users to their previous level!`,
       });
       setTimeout(() => setNotification(null), 5000);
       fetchUsers();
     } catch (err) {
-      setNotification({ type: "error", text: `Error undoing promotion: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error undoing promotion: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsUndoingLevel(false);
@@ -328,16 +407,18 @@ export default function UsersView() {
         isFullSemester,
         isTempActive,
         hasAccessRow: !!accessRow,
-        expiresAt: accessRow?.expires_at ? new Date(accessRow.expires_at) : null,
+        expiresAt: accessRow?.expires_at
+          ? new Date(accessRow.expires_at)
+          : null,
       });
     } catch {
       // Fallback to optimistic data so the modal still opens
       setGrantTargetInfo({
         user: u,
-        isFullSemester:   false,
-        isTempActive:      false,
-        hasAccessRow:      false,
-        expiresAt:         null,
+        isFullSemester: false,
+        isTempActive: false,
+        hasAccessRow: false,
+        expiresAt: null,
       });
     }
   };
@@ -357,7 +438,10 @@ export default function UsersView() {
         : grantReasonText.trim();
 
     if (!reason) {
-      setNotification({ type: "error", text: "Please provide a reason for the grant." });
+      setNotification({
+        type: "error",
+        text: "Please provide a reason for the grant.",
+      });
       setTimeout(() => setNotification(null), 4000);
       return;
     }
@@ -367,18 +451,21 @@ export default function UsersView() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/premium-grants/grant-days`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/premium-grants/grant-days`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            user_id: grantModalUser.id,
+            reason,
+            days: grantDays,
+          }),
         },
-        body: JSON.stringify({
-          user_id: grantModalUser.id,
-          reason,
-          days:    grantDays,
-        }),
-      });
+      );
 
       const data = await res.json();
       if (!res.ok) {
@@ -388,13 +475,17 @@ export default function UsersView() {
       closeGrantModal();
       setNotification({
         type: "success",
-        text: data.message
-          || `Granted ${data.days_added ?? grantDays} premium days to ${grantModalUser.full_name || grantModalUser.user_name}!`,
+        text:
+          data.message ||
+          `Granted ${data.days_added ?? grantDays} premium days to ${grantModalUser.full_name || grantModalUser.user_name}!`,
       });
       setTimeout(() => setNotification(null), 5000);
       fetchUsers();
     } catch (err) {
-      setNotification({ type: "error", text: `Error granting premium days: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error granting premium days: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setGrantLoading(false);
@@ -411,7 +502,8 @@ export default function UsersView() {
             User Management & Overrides
           </h1>
           <p className="text-slate-400 text-xs mt-1">
-            Search student profiles, grant/revoke premium access, edit academic details, and manage course access.
+            Search student profiles, grant/revoke premium access, edit academic
+            details, and manage course access.
           </p>
         </div>
 
@@ -448,7 +540,9 @@ export default function UsersView() {
       {notification && (
         <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between">
           <span>{notification.text}</span>
-          <button onClick={() => setNotification(null)}><X className="w-4 h-4" /></button>
+          <button onClick={() => setNotification(null)}>
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -465,51 +559,77 @@ export default function UsersView() {
               className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-          <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition">
+          <button
+            type="submit"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition"
+          >
             Search
           </button>
         </form>
 
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80 text-xs">
-          <span className="text-slate-500 font-semibold flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Filter:</span>
+          <span className="text-slate-500 font-semibold flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5" /> Filter:
+          </span>
 
           <select
             value={university}
-            onChange={(e) => { setUniversity(e.target.value); setCollegeFilter(""); setPage(1); }}
+            onChange={(e) => {
+              setUniversity(e.target.value);
+              setCollegeFilter("");
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Universities</option>
             {universities.map((u) => (
-              <option key={u.id} value={u.id}>{u.name || u.id}</option>
+              <option key={u.id} value={u.id}>
+                {u.name || u.id}
+              </option>
             ))}
           </select>
 
           <select
             value={collegeFilter}
-            onChange={(e) => { setCollegeFilter(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setCollegeFilter(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             disabled={!university}
           >
-            <option value="">{university ? "All Colleges" : "Select University First"}</option>
+            <option value="">
+              {university ? "All Colleges" : "Select University First"}
+            </option>
             {filterColleges.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
 
           <select
             value={yearFilter}
-            onChange={(e) => { setYearFilter(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setYearFilter(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Levels</option>
             {LEVEL_OPTIONS.map((l) => (
-              <option key={l.value} value={l.value}>{l.label}</option>
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
             ))}
           </select>
 
           <select
             value={premiumFilter}
-            onChange={(e) => { setPremiumFilter(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setPremiumFilter(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Users</option>
@@ -519,7 +639,13 @@ export default function UsersView() {
 
           {(university || collegeFilter || yearFilter || premiumFilter) && (
             <button
-              onClick={() => { setUniversity(""); setCollegeFilter(""); setYearFilter(""); setPremiumFilter(""); setPage(1); }}
+              onClick={() => {
+                setUniversity("");
+                setCollegeFilter("");
+                setYearFilter("");
+                setPremiumFilter("");
+                setPage(1);
+              }}
               className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[10px] font-bold transition"
             >
               <X className="w-3 h-3" /> Clear Filters
@@ -531,9 +657,13 @@ export default function UsersView() {
       {/* Users Table */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-slate-400">Loading student profiles...</div>
+          <div className="p-12 text-center text-slate-400">
+            Loading student profiles...
+          </div>
         ) : users.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 text-xs">No user accounts found matching query.</div>
+          <div className="p-12 text-center text-slate-500 text-xs">
+            No user accounts found matching query.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -552,13 +682,23 @@ export default function UsersView() {
                 {users.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-white">{u.full_name || u.user_name || "Unnamed User"}</div>
-                      <div className="text-[11px] text-slate-400">{u.email || u.user_name || u.id}</div>
+                      <div className="font-bold text-white">
+                        {u.full_name || u.user_name || "Unnamed User"}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {u.email || u.user_name || u.id}
+                      </div>
                     </td>
 
-                    <td className="py-3.5 px-4 font-semibold text-indigo-300">{u.university || "—"}</td>
-                    <td className="py-3.5 px-4 text-slate-300">{u.college || "-"} / {u.department || "-"}</td>
-                    <td className="py-3.5 px-4 text-slate-300">{formatLevel(u.year)}</td>
+                    <td className="py-3.5 px-4 font-semibold text-indigo-300">
+                      {u.university || "—"}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-300">
+                      {u.college || "-"} / {u.department || "-"}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-300">
+                      {formatLevel(u.year)}
+                    </td>
 
                     <td className="py-3.5 px-4">
                       {u.is_premium ? (
@@ -572,7 +712,9 @@ export default function UsersView() {
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4 font-bold text-amber-400">🔥 {u.streak || 0}</td>
+                    <td className="py-3.5 px-4 font-bold text-amber-400">
+                      🔥 {u.streak || 0}
+                    </td>
 
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -595,7 +737,9 @@ export default function UsersView() {
                           <Gift className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteUser(u.id, u.full_name || u.user_name)}
+                          onClick={() =>
+                            handleDeleteUser(u.id, u.full_name || u.user_name)
+                          }
                           className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
                           title="Delete User"
                         >
@@ -613,9 +757,19 @@ export default function UsersView() {
         {/* Pagination Bar */}
         <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <div>
-            Showing <span className="font-bold text-white">{users.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
-            <span className="font-bold text-white">{Math.min(page * limit, total)}</span> of{" "}
-            <span className="font-bold text-white">{total.toLocaleString()}</span> accounts
+            Showing{" "}
+            <span className="font-bold text-white">
+              {users.length > 0 ? (page - 1) * limit + 1 : 0}
+            </span>{" "}
+            to{" "}
+            <span className="font-bold text-white">
+              {Math.min(page * limit, total)}
+            </span>{" "}
+            of{" "}
+            <span className="font-bold text-white">
+              {total.toLocaleString()}
+            </span>{" "}
+            accounts
           </div>
 
           <div className="flex items-center gap-2">
@@ -626,7 +780,9 @@ export default function UsersView() {
             >
               <ChevronLeft className="w-4 h-4" /> Prev
             </button>
-            <span className="font-semibold text-slate-300 px-2">Page {page} of {totalPages}</span>
+            <span className="font-semibold text-slate-300 px-2">
+              Page {page} of {totalPages}
+            </span>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
@@ -643,27 +799,42 @@ export default function UsersView() {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white">Edit User Profile</h2>
-              <button onClick={() => setSelectedUser(null)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
+              <h2 className="text-base font-bold text-white">
+                Edit User Profile
+              </h2>
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Full Name</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Full Name
+                  </label>
                   <input
                     type="text"
                     value={editForm.full_name}
-                    onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, full_name: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Username</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Username
+                  </label>
                   <input
                     type="text"
                     value={editForm.user_name}
-                    onChange={(e) => setEditForm({ ...editForm, user_name: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, user_name: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
@@ -671,28 +842,44 @@ export default function UsersView() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">University</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    University
+                  </label>
                   <select
                     value={editForm.university}
-                    onChange={(e) => setEditForm({ ...editForm, university: e.target.value, college: "" })}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        university: e.target.value,
+                        college: "",
+                      })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="">Select University</option>
                     {universities.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name || u.id}</option>
+                      <option key={u.id} value={u.id}>
+                        {u.name || u.id}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Level</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Level
+                  </label>
                   <select
                     value={editForm.year}
-                    onChange={(e) => setEditForm({ ...editForm, year: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, year: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     {LEVEL_OPTIONS.map((l) => (
-                      <option key={l.value} value={l.value}>{l.label}</option>
+                      <option key={l.value} value={l.value}>
+                        {l.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -700,25 +887,41 @@ export default function UsersView() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">College</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    College
+                  </label>
                   <select
                     value={editForm.college}
-                    onChange={(e) => setEditForm({ ...editForm, college: e.target.value })}
-                    disabled={!editForm.university}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, college: e.target.value })
+                    }
+                    disabled={!editForm.university || editCollegesLoading}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
                   >
-                    <option value="">{editForm.university ? "Select College" : "Select University First"}</option>
+                    <option value="">
+                      {!editForm.university
+                        ? "Select University First"
+                        : editCollegesLoading
+                          ? "Loading colleges..."
+                          : "Select College"}
+                    </option>
                     {editColleges.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Department</label>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    Department
+                  </label>
                   <input
                     type="text"
                     value={editForm.department}
-                    onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, department: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
@@ -730,12 +933,16 @@ export default function UsersView() {
                   <div className="font-bold text-amber-400 flex items-center gap-1.5">
                     <Crown className="w-4 h-4" /> Grant Premium Access
                   </div>
-                  <div className="text-[10px] text-slate-400">Manually override user premium status</div>
+                  <div className="text-[10px] text-slate-400">
+                    Manually override user premium status
+                  </div>
                 </div>
                 <input
                   type="checkbox"
                   checked={editForm.is_premium}
-                  onChange={(e) => setEditForm({ ...editForm, is_premium: e.target.checked })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, is_premium: e.target.checked })
+                  }
                   className="w-4 h-4 accent-amber-500 cursor-pointer"
                 />
               </div>
@@ -766,18 +973,34 @@ export default function UsersView() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center gap-3 text-red-400 border-b border-slate-800 pb-3">
               <AlertTriangle className="w-7 h-7 shrink-0 text-red-400" />
-              <h2 className="text-base font-bold text-white">Clear All Favourite Courses</h2>
+              <h2 className="text-base font-bold text-white">
+                Clear All Favourite Courses
+              </h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Are you sure you want to <strong className="text-red-400">clear all favourite courses</strong> for <strong className="text-white">ALL users</strong> on the platform at once?
+              Are you sure you want to{" "}
+              <strong className="text-red-400">
+                clear all favourite courses
+              </strong>{" "}
+              for <strong className="text-white">ALL users</strong> on the
+              platform at once?
             </p>
 
             <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300 space-y-1">
               <div className="font-bold">What this action does:</div>
               <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-300">
-                <li>Resets <code className="bg-slate-800 px-1 rounded text-red-300">favourite_courses</code> array to empty for all student profiles.</li>
-                <li>Clears every user's saved course list from their homepage dashboard.</li>
+                <li>
+                  Resets{" "}
+                  <code className="bg-slate-800 px-1 rounded text-red-300">
+                    favourite_courses
+                  </code>{" "}
+                  array to empty for all student profiles.
+                </li>
+                <li>
+                  Clears every user's saved course list from their homepage
+                  dashboard.
+                </li>
                 <li>Records an audit log entry.</li>
               </ul>
             </div>
@@ -795,7 +1018,11 @@ export default function UsersView() {
                 onClick={handleConfirmClearAllFavourites}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isClearingFavs ? <RefreshCw className="w-4 h-4 animate-spin" /> : <HeartOff className="w-4 h-4" />}
+                {isClearingFavs ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <HeartOff className="w-4 h-4" />
+                )}
                 Yes, Clear All Favourites
               </button>
             </div>
@@ -809,20 +1036,35 @@ export default function UsersView() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center gap-3 text-indigo-400 border-b border-slate-800 pb-3">
               <TrendingUp className="w-7 h-7 shrink-0 text-indigo-400" />
-              <h2 className="text-base font-bold text-white">Promote All Users Level (+1)</h2>
+              <h2 className="text-base font-bold text-white">
+                Promote All Users Level (+1)
+              </h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Are you sure you want to <strong className="text-indigo-400">promote all student levels by +1 level</strong> platform-wide?
+              Are you sure you want to{" "}
+              <strong className="text-indigo-400">
+                promote all student levels by +1 level
+              </strong>{" "}
+              platform-wide?
             </p>
 
             <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 space-y-1.5">
               <div className="font-bold">Promotion Rules:</div>
               <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-300">
-                <li>100 Level (100L) → <strong>200 Level (200L)</strong></li>
-                <li>200 Level (200L) → <strong>300 Level (300L)</strong></li>
-                <li>300 Level (300L) → <strong>400 Level (400L)</strong></li>
-                <li><strong className="text-amber-400">400 Level (400L):</strong> Will remain in 400L (unchanged).</li>
+                <li>
+                  100 Level (100L) → <strong>200 Level (200L)</strong>
+                </li>
+                <li>
+                  200 Level (200L) → <strong>300 Level (300L)</strong>
+                </li>
+                <li>
+                  300 Level (300L) → <strong>400 Level (400L)</strong>
+                </li>
+                <li>
+                  <strong className="text-amber-400">400 Level (400L):</strong>{" "}
+                  Will remain in 400L (unchanged).
+                </li>
               </ul>
             </div>
 
@@ -839,7 +1081,11 @@ export default function UsersView() {
                 onClick={handleConfirmIncrementLevel}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isIncrementingLevel ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                {isIncrementingLevel ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <TrendingUp className="w-4 h-4" />
+                )}
                 Yes, Promote Everyone +1
               </button>
             </div>
@@ -853,13 +1099,22 @@ export default function UsersView() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center gap-3 text-amber-400 border-b border-slate-800 pb-3">
               <Undo2 className="w-7 h-7 shrink-0 text-amber-400" />
-              <h2 className="text-base font-bold text-white">Undo Last Promotion</h2>
+              <h2 className="text-base font-bold text-white">
+                Undo Last Promotion
+              </h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              This will revert <strong className="text-amber-400">{undoStatus?.updatedCount ?? 0} users</strong> back to
-              the level they were at before the last "Promote All Levels" action
-              {undoStatus?.promotedAt ? ` (run on ${new Date(undoStatus.promotedAt).toLocaleString()})` : ""}.
+              This will revert{" "}
+              <strong className="text-amber-400">
+                {undoStatus?.updatedCount ?? 0} users
+              </strong>{" "}
+              back to the level they were at before the last "Promote All
+              Levels" action
+              {undoStatus?.promotedAt
+                ? ` (run on ${new Date(undoStatus.promotedAt).toLocaleString()})`
+                : ""}
+              .
             </p>
 
             <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 space-y-1.5">
@@ -868,8 +1123,9 @@ export default function UsersView() {
                 Note
               </div>
               <p className="text-[11px] text-slate-300">
-                This only reverts the most recent promotion, and only within 24 hours of it running. Any manual level
-                edits made to individual users since then will NOT be restored.
+                This only reverts the most recent promotion, and only within 24
+                hours of it running. Any manual level edits made to individual
+                users since then will NOT be restored.
               </p>
             </div>
 
@@ -886,7 +1142,11 @@ export default function UsersView() {
                 onClick={handleConfirmUndoIncrementLevel}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isUndoingLevel ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
+                {isUndoingLevel ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Undo2 className="w-4 h-4" />
+                )}
                 Yes, Undo Promotion
               </button>
             </div>
@@ -903,7 +1163,10 @@ export default function UsersView() {
                 <Gift className="w-5 h-5 text-emerald-400" />
                 Grant Temporary Premium
               </h2>
-              <button onClick={closeGrantModal} className="text-slate-400 hover:text-slate-200">
+              <button
+                onClick={closeGrantModal}
+                className="text-slate-400 hover:text-slate-200"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -913,17 +1176,24 @@ export default function UsersView() {
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 font-semibold">Target</span>
                 <span className="text-white font-bold">
-                  {grantModalUser.full_name || grantModalUser.user_name || "Unnamed User"}
+                  {grantModalUser.full_name ||
+                    grantModalUser.user_name ||
+                    "Unnamed User"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-semibold">University / Level</span>
+                <span className="text-slate-400 font-semibold">
+                  University / Level
+                </span>
                 <span className="text-slate-300">
-                  {grantModalUser.university || "—"} · {formatLevel(grantModalUser.year)}
+                  {grantModalUser.university || "—"} ·{" "}
+                  {formatLevel(grantModalUser.year)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-semibold">Plan Status</span>
+                <span className="text-slate-400 font-semibold">
+                  Plan Status
+                </span>
                 <span>
                   {grantTargetInfo.isFullSemester ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -931,7 +1201,8 @@ export default function UsersView() {
                     </span>
                   ) : grantTargetInfo.isTempActive ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                      Temp active · expires {grantTargetInfo.expiresAt?.toLocaleDateString()}
+                      Temp active · expires{" "}
+                      {grantTargetInfo.expiresAt?.toLocaleDateString()}
                     </span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
@@ -950,8 +1221,12 @@ export default function UsersView() {
                   Full-semester user detected
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  This user already has <strong className="text-amber-300">permanent full-semester premium</strong> (not
-                  temporary). A free days grant is not required — their access never expires.
+                  This user already has{" "}
+                  <strong className="text-amber-300">
+                    permanent full-semester premium
+                  </strong>{" "}
+                  (not temporary). A free days grant is not required — their
+                  access never expires.
                 </p>
               </div>
             )}
@@ -959,13 +1234,17 @@ export default function UsersView() {
             {/* Reason + Day picker form */}
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Reason for grant</label>
+                <label className="block text-slate-400 mb-1 font-semibold">
+                  Reason for grant
+                </label>
                 <div className="space-y-2">
-                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
-                    grantPreset === "contribution"
-                      ? "bg-slate-800 border-emerald-500/50 text-white"
-                      : "bg-slate-950/50 border-slate-800 text-slate-400"
-                  }`}>
+                  <label
+                    className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                      grantPreset === "contribution"
+                        ? "bg-slate-800 border-emerald-500/50 text-white"
+                        : "bg-slate-950/50 border-slate-800 text-slate-400"
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="grantReason"
@@ -973,13 +1252,17 @@ export default function UsersView() {
                       onChange={() => setGrantPreset("contribution")}
                       className="accent-emerald-500"
                     />
-                    <span className="font-semibold text-[11px]">Material Contribution</span>
+                    <span className="font-semibold text-[11px]">
+                      Material Contribution
+                    </span>
                   </label>
-                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
-                    grantPreset === "other"
-                      ? "bg-slate-800 border-emerald-500/50 text-white"
-                      : "bg-slate-950/50 border-slate-800 text-slate-400"
-                  }`}>
+                  <label
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                      grantPreset === "other"
+                        ? "bg-slate-800 border-emerald-500/50 text-white"
+                        : "bg-slate-950/50 border-slate-800 text-slate-400"
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="grantReason"
@@ -988,12 +1271,17 @@ export default function UsersView() {
                       className="mt-0.5 accent-emerald-500"
                     />
                     <div className="flex-1 space-y-1.5">
-                      <span className="font-semibold text-[11px]">Other reason</span>
+                      <span className="font-semibold text-[11px]">
+                        Other reason
+                      </span>
                       <input
                         type="text"
                         placeholder="E.g. Bug bounty, Beta tester gift, Support resolution…"
                         value={grantReasonText}
-                        onChange={(e) => { setGrantReasonText(e.target.value); setGrantPreset("other"); }}
+                        onChange={(e) => {
+                          setGrantReasonText(e.target.value);
+                          setGrantPreset("other");
+                        }}
                         onFocus={() => setGrantPreset("other")}
                         className="w-full px-2.5 py-1.5 bg-slate-950/70 border border-slate-700 rounded-lg text-[11px] text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
                       />
@@ -1003,7 +1291,9 @@ export default function UsersView() {
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Days to grant</label>
+                <label className="block text-slate-400 mb-1 font-semibold">
+                  Days to grant
+                </label>
                 <div className="grid grid-cols-4 gap-2">
                   {[3, 7, 14, 30].map((d) => (
                     <button
