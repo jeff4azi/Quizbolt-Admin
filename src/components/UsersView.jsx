@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Users,
@@ -20,6 +20,8 @@ import {
   GraduationCap,
   BookOpen,
   Gift,
+  RotateCcw,
+  Plus,
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
@@ -101,6 +103,17 @@ export default function UsersView() {
   const { colleges: editColleges, loadingColleges: editCollegesLoading } =
     useColleges(editForm.university);
 
+  // Edit modal tab: 'profile' | 'rerun'
+  const [editModalTab, setEditModalTab] = useState("profile");
+
+  // Rerun courses state
+  const [overrides, setOverrides] = useState([]); // current user overrides
+  const [overridesLoading, setOverridesLoading] = useState(false);
+  const [candidateCourses, setCandidateCourses] = useState([]); // all courses for user's university
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [overrideSearch, setOverrideSearch] = useState("");
+  const [overrideActionLoading, setOverrideActionLoading] = useState(false);
+
   const [notification, setNotification] = useState(null);
 
   const fetchUsers = async () => {
@@ -175,6 +188,8 @@ export default function UsersView() {
 
   const openEditModal = (user) => {
     setSelectedUser(user);
+    setEditModalTab("profile");
+    setOverrideSearch("");
     setEditForm({
       full_name: user.full_name || "",
       user_name: user.user_name || "",
@@ -186,6 +201,106 @@ export default function UsersView() {
       year: user.year ? String(user.year) : "1",
       is_premium: Boolean(user.is_premium),
     });
+
+    // Fetch overrides and candidate courses in parallel
+    fetchUserOverrides(user.id);
+    fetchCandidateCourses(user);
+  };
+
+  const fetchUserOverrides = async (userId) => {
+    setOverridesLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/${userId}/overrides`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setOverrides(data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch overrides:", err);
+    } finally {
+      setOverridesLoading(false);
+    }
+  };
+
+  const fetchCandidateCourses = async (user) => {
+    const uni = user.university ? user.university.trim().toLowerCase() : "";
+    if (!uni) {
+      setCandidateCourses([]);
+      return;
+    }
+    setCandidateLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      // Fetch all courses for this university (no level filter — we filter client-side)
+      const params = new URLSearchParams({ university: uni, limit: "500" });
+      const res = await fetch(`${API_BASE_URL}/api/admin/courses?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCandidateCourses(data.courses || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch candidate courses:", err);
+    } finally {
+      setCandidateLoading(false);
+    }
+  };
+
+  const handleAddOverride = async (courseCode) => {
+    if (!selectedUser) return;
+    setOverrideActionLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/${selectedUser.id}/overrides`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ course_code: courseCode }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to add override");
+      const data = await res.json();
+      setOverrides((prev) => [...prev, data]);
+    } catch (err) {
+      setNotification({ type: "error", text: err.message });
+      setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setOverrideActionLoading(false);
+    }
+  };
+
+  const handleRemoveOverride = async (overrideId) => {
+    if (!selectedUser) return;
+    setOverrideActionLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/${selectedUser.id}/overrides/${overrideId}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error("Failed to remove override");
+      setOverrides((prev) => prev.filter((o) => o.id !== overrideId));
+    } catch (err) {
+      setNotification({ type: "error", text: err.message });
+      setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setOverrideActionLoading(false);
+    }
   };
 
   const handleSaveUser = async (e) => {
@@ -797,11 +912,17 @@ export default function UsersView() {
       {/* Edit User Profile Modal */}
       {selectedUser && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white">
-                Edit User Profile
-              </h2>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <div>
+                <h2 className="text-base font-bold text-white">
+                  Edit User Profile
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {selectedUser.full_name || selectedUser.user_name}
+                </p>
+              </div>
               <button
                 onClick={() => setSelectedUser(null)}
                 className="text-slate-400 hover:text-slate-200"
@@ -810,159 +931,395 @@ export default function UsersView() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.full_name}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, full_name: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.user_name}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, user_name: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
+            {/* Tabs */}
+            <div className="flex gap-1 shrink-0 bg-slate-800/50 p-1 rounded-xl">
+              <button
+                onClick={() => setEditModalTab("profile")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                  editModalTab === "profile"
+                    ? "bg-indigo-600 text-white shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Profile
+              </button>
+              <button
+                onClick={() => setEditModalTab("rerun")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  editModalTab === "rerun"
+                    ? "bg-indigo-600 text-white shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                <RotateCcw className="w-3 h-3" />
+                Rerun Courses
+                {overrides.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-indigo-500/30 text-indigo-200">
+                    {overrides.length}
+                  </span>
+                )}
+              </button>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    University
-                  </label>
-                  <select
-                    value={editForm.university}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        university: e.target.value,
-                        college: "",
-                      })
-                    }
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  >
-                    <option value="">Select University</option>
-                    {universities.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name || u.id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    Level
-                  </label>
-                  <select
-                    value={editForm.year}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, year: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  >
-                    {LEVEL_OPTIONS.map((l) => (
-                      <option key={l.value} value={l.value}>
-                        {l.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    College
-                  </label>
-                  <select
-                    value={editForm.college}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, college: e.target.value })
-                    }
-                    disabled={!editForm.university || editCollegesLoading}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
-                  >
-                    <option value="">
-                      {!editForm.university
-                        ? "Select University First"
-                        : editCollegesLoading
-                          ? "Loading colleges..."
-                          : "Select College"}
-                    </option>
-                    {editColleges.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    Department
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.department}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, department: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Premium Access Toggle */}
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-amber-400 flex items-center gap-1.5">
-                    <Crown className="w-4 h-4" /> Grant Premium Access
+            {/* Tab Content — scrollable */}
+            <div className="overflow-y-auto flex-1 min-h-0">
+              {/* ── Profile Tab ── */}
+              {editModalTab === "profile" && (
+                <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-semibold">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.full_name}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            full_name: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-semibold">
+                        Username
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.user_name}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            user_name: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    Manually override user premium status
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={editForm.is_premium}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, is_premium: e.target.checked })
-                  }
-                  className="w-4 h-4 accent-amber-500 cursor-pointer"
-                />
-              </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setSelectedUser(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition"
-                >
-                  Save Profile Changes
-                </button>
-              </div>
-            </form>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-semibold">
+                        University
+                      </label>
+                      <select
+                        value={editForm.university}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            university: e.target.value,
+                            college: "",
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="">Select University</option>
+                        {universities.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name || u.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-semibold">
+                        Level
+                      </label>
+                      <select
+                        value={editForm.year}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, year: e.target.value })
+                        }
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        {LEVEL_OPTIONS.map((l) => (
+                          <option key={l.value} value={l.value}>
+                            {l.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-semibold">
+                        College
+                      </label>
+                      <select
+                        value={editForm.college}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, college: e.target.value })
+                        }
+                        disabled={!editForm.university || editCollegesLoading}
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+                      >
+                        <option value="">
+                          {!editForm.university
+                            ? "Select University First"
+                            : editCollegesLoading
+                              ? "Loading colleges..."
+                              : "Select College"}
+                        </option>
+                        {editColleges.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-semibold">
+                        Department
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.department}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            department: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Premium toggle */}
+                  <label className="flex items-center gap-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl cursor-pointer hover:bg-amber-500/10 transition">
+                    <input
+                      type="checkbox"
+                      checked={editForm.is_premium}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          is_premium: e.target.checked,
+                        })
+                      }
+                      className="rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500"
+                    />
+                    <div>
+                      <div className="text-amber-400 font-bold flex items-center gap-1.5">
+                        <Crown className="w-3.5 h-3.5" /> Grant Premium Access
+                      </div>
+                      <div className="text-slate-500 text-[10px] mt-0.5">
+                        Manually override user premium status
+                      </div>
+                    </div>
+                  </label>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUser(null)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition"
+                    >
+                      Save Profile Changes
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* ── Rerun Courses Tab ── */}
+              {editModalTab === "rerun" &&
+                (() => {
+                  const userYear = parseInt(
+                    editForm.year || selectedUser.year || "1",
+                    10,
+                  );
+                  const userCollege = (
+                    editForm.college ||
+                    selectedUser.college ||
+                    ""
+                  ).toUpperCase();
+                  const userUni = (selectedUser.university || "")
+                    .trim()
+                    .toUpperCase();
+
+                  // Filter: same university, level strictly lower than user's current level,
+                  // and college matches user's college or is "ALL"
+                  const eligible = candidateCourses.filter((c) => {
+                    const courseLevel = Math.floor(Number(c.level) / 100); // e.g. 100→1, 200→2
+                    if (courseLevel >= userYear) return false;
+                    const colleges = (c.colleges || []).map((x) =>
+                      x.toUpperCase(),
+                    );
+                    if (
+                      !colleges.includes("ALL") &&
+                      !colleges.includes(userCollege)
+                    )
+                      return false;
+                    return true;
+                  });
+
+                  const alreadyAdded = new Set(
+                    overrides.map((o) => o.course_code.toUpperCase()),
+                  );
+
+                  const filtered = eligible.filter((c) => {
+                    if (!overrideSearch.trim()) return true;
+                    const q = overrideSearch.toLowerCase();
+                    return (
+                      c.course_code.toLowerCase().includes(q) ||
+                      (c.title || "").toLowerCase().includes(q)
+                    );
+                  });
+
+                  return (
+                    <div className="space-y-4 text-xs">
+                      {/* Info banner */}
+                      <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-300 text-[11px]">
+                        Rerun courses let a student access lower-level courses
+                        they may have missed. Showing <strong>{userUni}</strong>{" "}
+                        courses below <strong>{LEVEL_LABELS[userYear]}</strong>{" "}
+                        that match their college.
+                      </div>
+
+                      {/* Current overrides */}
+                      <div>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-2">
+                          Current Rerun Courses ({overrides.length})
+                        </p>
+                        {overridesLoading ? (
+                          <div className="text-slate-500 text-[11px]">
+                            Loading...
+                          </div>
+                        ) : overrides.length === 0 ? (
+                          <div className="text-slate-600 text-[11px] italic">
+                            No rerun courses assigned yet.
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {overrides.map((o) => (
+                              <span
+                                key={o.id}
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-950/60 border border-indigo-700/50 text-indigo-300 rounded-lg font-mono font-bold text-[11px]"
+                              >
+                                {o.course_code}
+                                <button
+                                  onClick={() => handleRemoveOverride(o.id)}
+                                  disabled={overrideActionLoading}
+                                  className="text-indigo-400 hover:text-rose-400 transition disabled:opacity-40"
+                                  title="Remove override"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Search + picker */}
+                      <div>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-2">
+                          Add Course
+                        </p>
+                        <div className="relative mb-2">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                          <input
+                            type="text"
+                            placeholder="Search by code or title..."
+                            value={overrideSearch}
+                            onChange={(e) => setOverrideSearch(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        {candidateLoading ? (
+                          <div className="py-6 text-center text-slate-500">
+                            <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-1" />
+                            Loading courses...
+                          </div>
+                        ) : filtered.length === 0 ? (
+                          <div className="py-6 text-center text-slate-600 italic">
+                            {eligible.length === 0
+                              ? "No eligible courses found for this university / level combination."
+                              : "No courses match your search."}
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                            {filtered.map((c) => {
+                              const added = alreadyAdded.has(
+                                c.course_code.toUpperCase(),
+                              );
+                              return (
+                                <div
+                                  key={`${c.university}_${c.course_code}`}
+                                  className={`flex items-center justify-between px-3 py-2 rounded-xl border transition ${
+                                    added
+                                      ? "bg-indigo-950/30 border-indigo-700/40 opacity-60"
+                                      : "bg-slate-800/60 border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800"
+                                  }`}
+                                >
+                                  <div>
+                                    <span className="font-mono font-bold text-indigo-400 text-[11px]">
+                                      {c.course_code}
+                                    </span>
+                                    <span className="text-slate-400 mx-1.5">
+                                      ·
+                                    </span>
+                                    <span className="text-slate-300 text-[11px]">
+                                      {c.title}
+                                    </span>
+                                    <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                                      {c.level}L ·{" "}
+                                      {(c.colleges || []).join(", ")}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      !added && handleAddOverride(c.course_code)
+                                    }
+                                    disabled={added || overrideActionLoading}
+                                    className={`ml-3 p-1.5 rounded-lg transition shrink-0 ${
+                                      added
+                                        ? "text-indigo-500 cursor-default"
+                                        : "text-slate-400 hover:text-emerald-400 hover:bg-slate-700 disabled:opacity-40"
+                                    }`}
+                                    title={
+                                      added
+                                        ? "Already added"
+                                        : "Add rerun course"
+                                    }
+                                  >
+                                    {added ? (
+                                      <Check className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Plus className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUser(null)}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+            </div>
           </div>
         </div>
       )}
