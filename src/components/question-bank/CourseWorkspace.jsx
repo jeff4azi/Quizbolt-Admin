@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Plus,
   Upload,
+  Download,
   Search,
   Filter,
   Trash2,
@@ -20,6 +21,8 @@ import {
   BookOpen,
   MoveRight,
   Sparkles,
+  EyeOff,
+  Eye,
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
 import { supabase } from "../../lib/supabaseClient";
@@ -61,7 +64,7 @@ export default function CourseWorkspace({
   // Duplicate detection state
   const [duplicatePairs, setDuplicatePairs] = useState([]);
   const [duplicatePairsCount, setDuplicatePairsCount] = useState(0);
-  const [duplicateThreshold, setDuplicateThreshold] = useState(0.70);
+  const [duplicateThreshold, setDuplicateThreshold] = useState(0.7);
   const [includeOtherTypes, setIncludeOtherTypes] = useState(false);
   const [loadingDuplicates, setLoadingDuplicates] = useState(false);
 
@@ -77,9 +80,12 @@ export default function CourseWorkspace({
         threshold: duplicateThreshold,
         include_other_types: includeOtherTypes,
       });
-      const res = await fetch(`${API_BASE_URL}/api/admin/questions/duplicates?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/questions/duplicates?${params}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       if (res.ok) {
         const resData = await res.json();
         setDuplicatePairs(resData.pairs || []);
@@ -100,21 +106,27 @@ export default function CourseWorkspace({
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
-      const res = await fetch(`${API_BASE_URL}/api/admin/questions/duplicates/dismiss`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/questions/duplicates/dismiss`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            university: activeCourse.university,
+            course_code: activeCourse.course_code,
+            question_id_a: pair.question_id_a,
+            question_id_b: pair.question_id_b,
+          }),
         },
-        body: JSON.stringify({
-          university: activeCourse.university,
-          course_code: activeCourse.course_code,
-          question_id_a: pair.question_id_a,
-          question_id_b: pair.question_id_b,
-        }),
-      });
+      );
       if (res.ok) {
-        setNotification({ type: "success", message: "Pair marked as 'Not a Duplicate'." });
+        setNotification({
+          type: "success",
+          message: "Pair marked as 'Not a Duplicate'.",
+        });
         fetchDuplicates();
       }
     } catch (err) {
@@ -135,6 +147,16 @@ export default function CourseWorkspace({
   const [bulkDifficulty, setBulkDifficulty] = useState("medium");
   const [bulkSection, setBulkSection] = useState("");
   const [targetMoveCourse, setTargetMoveCourse] = useState("");
+
+  // Export modal state
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState("json");
+  const [exportType, setExportType] = useState(""); // "" means all types
+  const [exportIncludeDisabled, setExportIncludeDisabled] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Disabled filter (admin can choose to view disabled questions)
+  const [showDisabledFilter, setShowDisabledFilter] = useState("all"); // 'all' | 'active' | 'disabled'
 
   // 10-second Undo toast state
   const [undoToast, setUndoToast] = useState(null); // { questions: [...], timerId: ..., secondsLeft: 10 }
@@ -158,7 +180,7 @@ export default function CourseWorkspace({
 
       const resCounts = await fetch(
         `${API_BASE_URL}/api/admin/courses/${activeCourse.course_code}/question-counts?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       if (resCounts.ok) {
         const countsData = await resCounts.json();
@@ -174,7 +196,7 @@ export default function CourseWorkspace({
       // 2. Needs review count
       const resReview = await fetch(
         `${API_BASE_URL}/api/admin/questions/needs-review?${params}&limit=1`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       if (resReview.ok) {
         const reviewData = await resReview.json();
@@ -200,17 +222,24 @@ export default function CourseWorkspace({
           page,
           limit,
         });
-        const res = await fetch(`${API_BASE_URL}/api/admin/questions/needs-review?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(
+          `${API_BASE_URL}/api/admin/questions/needs-review?${params}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (res.ok) {
           const resData = await res.json();
           let list = resData.data || resData.questions || [];
           if (search) {
-            list = list.filter((q) => (q.question || "").toLowerCase().includes(search.toLowerCase()));
+            list = list.filter((q) =>
+              (q.question || "").toLowerCase().includes(search.toLowerCase()),
+            );
           }
           setQuestions(list);
-          setTotalQuestions(resData.total !== undefined ? resData.total : (resData.count || 0));
+          setTotalQuestions(
+            resData.total !== undefined ? resData.total : resData.count || 0,
+          );
           setTotalPages(resData.totalPages || 1);
         }
       } else {
@@ -225,21 +254,31 @@ export default function CourseWorkspace({
         if (activeTab !== "all") {
           params.append("type", activeTab);
         }
+        if (showDisabledFilter === "active")
+          params.append("is_disabled", "false");
+        if (showDisabledFilter === "disabled")
+          params.append("is_disabled", "true");
 
-        const res = await fetch(`${API_BASE_URL}/api/admin/questions?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(
+          `${API_BASE_URL}/api/admin/questions?${params}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
 
         if (res.ok) {
           const resData = await res.json();
           let list = resData.questions || resData.data || [];
           if (sectionFilter) {
             list = list.filter(
-              (q) => (q.section || "").toLowerCase() === sectionFilter.toLowerCase()
+              (q) =>
+                (q.section || "").toLowerCase() === sectionFilter.toLowerCase(),
             );
           }
           setQuestions(list);
-          setTotalQuestions(resData.total !== undefined ? resData.total : (resData.count || 0));
+          setTotalQuestions(
+            resData.total !== undefined ? resData.total : resData.count || 0,
+          );
           setTotalPages(resData.totalPages || 1);
         }
       }
@@ -257,11 +296,19 @@ export default function CourseWorkspace({
   useEffect(() => {
     fetchQuestions();
     setSelectedIds([]);
-  }, [activeCourse, activeTab, page, search, difficultyFilter, sectionFilter]);
+  }, [
+    activeCourse,
+    activeTab,
+    page,
+    search,
+    difficultyFilter,
+    sectionFilter,
+    showDisabledFilter,
+  ]);
 
   // Unique sections list from currently loaded questions
   const availableSections = Array.from(
-    new Set(questions.map((q) => q.section).filter(Boolean))
+    new Set(questions.map((q) => q.section).filter(Boolean)),
   );
 
   // Multi-select toggle
@@ -287,19 +334,25 @@ export default function CourseWorkspace({
     const token = session?.session?.access_token;
 
     if (existingId) {
-      const res = await fetch(`${API_BASE_URL}/api/admin/questions/${existingId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/questions/${existingId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+      );
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to update question.");
       }
-      setNotification({ type: "success", message: "Question updated successfully!" });
+      setNotification({
+        type: "success",
+        message: "Question updated successfully!",
+      });
     } else {
       const res = await fetch(`${API_BASE_URL}/api/admin/questions`, {
         method: "POST",
@@ -313,7 +366,10 @@ export default function CourseWorkspace({
         const err = await res.json();
         throw new Error(err.error || "Failed to create question.");
       }
-      setNotification({ type: "success", message: "Question created successfully!" });
+      setNotification({
+        type: "success",
+        message: "Question created successfully!",
+      });
     }
 
     fetchQuestions();
@@ -397,7 +453,9 @@ export default function CourseWorkspace({
         setUndoToast(null);
         fetchCounts();
       } else {
-        setUndoToast((prev) => (prev ? { ...prev, secondsLeft: countdown } : null));
+        setUndoToast((prev) =>
+          prev ? { ...prev, secondsLeft: countdown } : null,
+        );
       }
     }, 1000);
   };
@@ -436,7 +494,7 @@ export default function CourseWorkspace({
     }
   };
 
-  // Execute Bulk Update (difficulty, section, or move)
+  // Execute Bulk Update (difficulty, section, move, or disable toggle)
   const handleExecuteBulkUpdate = async () => {
     if (selectedIds.length === 0) return;
     try {
@@ -453,19 +511,26 @@ export default function CourseWorkspace({
         if (!targetUni || !targetCode) return;
         updates.university = targetUni;
         updates.course_code = targetCode;
+      } else if (bulkActionType === "disable") {
+        updates.is_disabled = true;
+      } else if (bulkActionType === "enable") {
+        updates.is_disabled = false;
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/questions/bulk-update`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/questions/bulk-update`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ids: selectedIds,
+            updates,
+          }),
         },
-        body: JSON.stringify({
-          ids: selectedIds,
-          updates,
-        }),
-      });
+      );
 
       if (res.ok) {
         setNotification({
@@ -490,6 +555,143 @@ export default function CourseWorkspace({
     } catch (err) {
       setNotification({ type: "error", message: err.message });
     }
+  };
+
+  // Toggle disable on a single question
+  const handleToggleDisableSingle = async (q) => {
+    const newState = !q.is_disabled;
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/admin/questions/${q.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ is_disabled: newState }),
+      });
+      if (!res.ok) throw new Error("Failed to update question");
+      // Optimistic update
+      setQuestions((prev) =>
+        prev.map((item) =>
+          item.id === q.id ? { ...item, is_disabled: newState } : item,
+        ),
+      );
+      setNotification({
+        type: "success",
+        message: `Question "${q.question_id}" ${newState ? "disabled" : "re-enabled"} successfully.`,
+      });
+    } catch (err) {
+      setNotification({ type: "error", message: err.message });
+    }
+  };
+
+  // Export questions (full course / filtered)
+  const handleExport = async () => {
+    if (!activeCourse) return;
+    setIsExporting(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const params = new URLSearchParams({
+        university: activeCourse.university,
+        course_code: activeCourse.course_code,
+        format: exportFormat,
+        include_disabled: String(exportIncludeDisabled),
+      });
+      if (exportType) params.append("type", exportType);
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/questions/export?${params}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      if (!res.ok) throw new Error("Export failed");
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${activeCourse.university.toUpperCase()}_${activeCourse.course_code.toUpperCase()}_questions.${exportFormat}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setIsExportModalOpen(false);
+      setNotification({
+        type: "success",
+        message: "Export downloaded successfully!",
+      });
+    } catch (err) {
+      setNotification({ type: "error", message: err.message });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export selected questions only (client-side, JSON or CSV)
+  const handleExportSelected = (fmt = "json") => {
+    const selected = questions.filter((q) => selectedIds.includes(q.id));
+    if (selected.length === 0) return;
+
+    const filename = `${activeCourse.university.toUpperCase()}_${activeCourse.course_code.toUpperCase()}_selected_questions`;
+
+    if (fmt === "csv") {
+      const fields = [
+        "question_id",
+        "type",
+        "question",
+        "options",
+        "correct",
+        "reason",
+        "difficulty",
+        "section",
+        "match_prompt",
+        "hint",
+        "keywords",
+        "model_answer",
+        "answers",
+        "order_index",
+        "is_disabled",
+      ];
+      const escapeCell = (val) => {
+        if (val === null || val === undefined) return "";
+        const str = typeof val === "object" ? JSON.stringify(val) : String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+      const csv = [
+        fields.join(","),
+        ...selected.map((q) => fields.map((f) => escapeCell(q[f])).join(",")),
+      ].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } else {
+      const blob = new Blob([JSON.stringify(selected, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+    setNotification({
+      type: "success",
+      message: `Exported ${selected.length} questions as ${fmt.toUpperCase()}.`,
+    });
   };
 
   return (
@@ -522,11 +724,18 @@ export default function CourseWorkspace({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setIsExportModalOpen(true)}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              Export
+            </button>
+            <button
               onClick={() => setIsImportWizardOpen(true)}
               className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
             >
               <Upload className="w-4 h-4 text-indigo-400" />
-              Import Questions
+              Import
             </button>
             <button
               onClick={() => {
@@ -547,16 +756,19 @@ export default function CourseWorkspace({
             Total: <strong className="text-white">{breakdown.total}</strong>
           </span>
           <span className="px-3 py-1 bg-slate-950 rounded-lg border border-slate-800 text-slate-300">
-            MCQ: <strong className="text-indigo-400">{breakdown.objective}</strong>
+            MCQ:{" "}
+            <strong className="text-indigo-400">{breakdown.objective}</strong>
           </span>
           <span className="px-3 py-1 bg-slate-950 rounded-lg border border-slate-800 text-slate-300">
-            Theory: <strong className="text-amber-400">{breakdown.theory}</strong>
+            Theory:{" "}
+            <strong className="text-amber-400">{breakdown.theory}</strong>
           </span>
           <span className="px-3 py-1 bg-slate-950 rounded-lg border border-slate-800 text-slate-300">
             FIB: <strong className="text-emerald-400">{breakdown.fib}</strong>
           </span>
           <span className="px-3 py-1 bg-slate-950 rounded-lg border border-slate-800 text-slate-300">
-            Matching: <strong className="text-sky-400">{breakdown.matching}</strong>
+            Matching:{" "}
+            <strong className="text-sky-400">{breakdown.matching}</strong>
           </span>
         </div>
       </div>
@@ -580,7 +792,11 @@ export default function CourseWorkspace({
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 pb-2">
         {[
           { id: "all", label: "All Questions", count: breakdown.total },
-          { id: "objective", label: "Objective (MCQ)", count: breakdown.objective },
+          {
+            id: "objective",
+            label: "Objective (MCQ)",
+            count: breakdown.objective,
+          },
           { id: "theory", label: "Theory", count: breakdown.theory },
           { id: "fib", label: "Fill-in-the-Blank", count: breakdown.fib },
           { id: "matching", label: "Matching", count: breakdown.matching },
@@ -615,8 +831,8 @@ export default function CourseWorkspace({
                 tab.alert
                   ? "bg-amber-500/30 text-amber-300 border border-amber-500/40"
                   : activeTab === tab.id
-                  ? "bg-indigo-700 text-white"
-                  : "bg-slate-800 text-slate-400"
+                    ? "bg-indigo-700 text-white"
+                    : "bg-slate-800 text-slate-400"
               }`}
             >
               {tab.count}
@@ -675,6 +891,20 @@ export default function CourseWorkspace({
               ))}
             </select>
           )}
+
+          {/* Disabled status filter */}
+          <select
+            value={showDisabledFilter}
+            onChange={(e) => {
+              setShowDisabledFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active only</option>
+            <option value="disabled">Disabled only</option>
+          </select>
         </div>
       </div>
 
@@ -684,11 +914,12 @@ export default function CourseWorkspace({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs font-bold text-white">
-              {selectedIds.length} question{selectedIds.length > 1 ? "s" : ""} selected
+              {selectedIds.length} question{selectedIds.length > 1 ? "s" : ""}{" "}
+              selected
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Update Difficulty */}
             <button
               onClick={() => setBulkActionType("difficulty")}
@@ -711,6 +942,38 @@ export default function CourseWorkspace({
               className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-indigo-500/40 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
             >
               <MoveRight className="w-3.5 h-3.5" /> Move Course
+            </button>
+
+            {/* Bulk Disable */}
+            <button
+              onClick={() => setBulkActionType("disable")}
+              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
+            >
+              <EyeOff className="w-3.5 h-3.5" /> Disable
+            </button>
+
+            {/* Bulk Enable */}
+            <button
+              onClick={() => setBulkActionType("enable")}
+              className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
+            >
+              <Eye className="w-3.5 h-3.5" /> Enable
+            </button>
+
+            {/* Export Selected — JSON */}
+            <button
+              onClick={() => handleExportSelected("json")}
+              className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-indigo-500/40 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" /> JSON
+            </button>
+
+            {/* Export Selected — CSV */}
+            <button
+              onClick={() => handleExportSelected("csv")}
+              className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-indigo-500/40 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" /> CSV
             </button>
 
             {/* Bulk Delete */}
@@ -750,7 +1013,8 @@ export default function CourseWorkspace({
               onClick={handleUndoDelete}
               className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Undo ({undoToast.secondsLeft}s)
+              <RotateCcw className="w-3.5 h-3.5" /> Undo (
+              {undoToast.secondsLeft}s)
             </button>
             <button
               onClick={() => setUndoToast(null)}
@@ -770,7 +1034,10 @@ export default function CourseWorkspace({
               <h3 className="text-sm font-bold text-white">
                 {bulkActionType === "difficulty" && "Bulk Set Difficulty"}
                 {bulkActionType === "section" && "Bulk Set Curriculum Section"}
-                {bulkActionType === "move" && "Move Questions to Another Course"}
+                {bulkActionType === "move" &&
+                  "Move Questions to Another Course"}
+                {bulkActionType === "disable" && "Disable Questions"}
+                {bulkActionType === "enable" && "Re-enable Questions"}
               </h3>
               <button
                 onClick={() => setBulkActionType(null)}
@@ -782,12 +1049,18 @@ export default function CourseWorkspace({
 
             <div className="text-xs space-y-3">
               <p className="text-slate-400">
-                Applying to <span className="font-bold text-white">{selectedIds.length}</span> selected questions.
+                Applying to{" "}
+                <span className="font-bold text-white">
+                  {selectedIds.length}
+                </span>{" "}
+                selected questions.
               </p>
 
               {bulkActionType === "difficulty" && (
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Select Difficulty</label>
+                  <label className="block text-slate-400 font-semibold mb-1">
+                    Select Difficulty
+                  </label>
                   <select
                     value={bulkDifficulty}
                     onChange={(e) => setBulkDifficulty(e.target.value)}
@@ -802,7 +1075,9 @@ export default function CourseWorkspace({
 
               {bulkActionType === "section" && (
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Section / Topic Name</label>
+                  <label className="block text-slate-400 font-semibold mb-1">
+                    Section / Topic Name
+                  </label>
                   <input
                     type="text"
                     placeholder="e.g. Chapter 3: Networking"
@@ -835,6 +1110,33 @@ export default function CourseWorkspace({
                   </select>
                 </div>
               )}
+
+              {bulkActionType === "disable" && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 space-y-1">
+                  <p className="font-semibold flex items-center gap-2">
+                    <EyeOff className="w-4 h-4" /> These questions will be
+                    hidden from students.
+                  </p>
+                  <p className="text-slate-400">
+                    They won't appear in exams, tests, flashcards, or match
+                    games until re-enabled. They remain in the database and can
+                    be re-enabled at any time.
+                  </p>
+                </div>
+              )}
+
+              {bulkActionType === "enable" && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 space-y-1">
+                  <p className="font-semibold flex items-center gap-2">
+                    <Eye className="w-4 h-4" /> These questions will become
+                    visible to students again.
+                  </p>
+                  <p className="text-slate-400">
+                    They will appear in exams, tests, flashcards, and match
+                    games immediately.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-slate-800 pt-3 flex justify-end gap-2">
@@ -863,7 +1165,10 @@ export default function CourseWorkspace({
             <div className="flex flex-wrap items-center gap-6 text-xs">
               <div className="flex items-center gap-3">
                 <label className="text-slate-400 font-semibold">
-                  Similarity Threshold: <strong className="text-indigo-400 font-mono text-sm">{Math.round(duplicateThreshold * 100)}%</strong>
+                  Similarity Threshold:{" "}
+                  <strong className="text-indigo-400 font-mono text-sm">
+                    {Math.round(duplicateThreshold * 100)}%
+                  </strong>
                 </label>
                 <input
                   type="range"
@@ -871,7 +1176,9 @@ export default function CourseWorkspace({
                   max="0.95"
                   step="0.05"
                   value={duplicateThreshold}
-                  onChange={(e) => setDuplicateThreshold(parseFloat(e.target.value))}
+                  onChange={(e) =>
+                    setDuplicateThreshold(parseFloat(e.target.value))
+                  }
                   className="w-40 accent-indigo-500 cursor-pointer"
                 />
               </div>
@@ -888,7 +1195,11 @@ export default function CourseWorkspace({
             </div>
 
             <div className="text-xs text-slate-400 font-mono">
-              Found <strong className="text-amber-400">{duplicatePairs.length}</strong> candidate pair{duplicatePairs.length !== 1 ? "s" : ""}
+              Found{" "}
+              <strong className="text-amber-400">
+                {duplicatePairs.length}
+              </strong>{" "}
+              candidate pair{duplicatePairs.length !== 1 ? "s" : ""}
             </div>
           </div>
 
@@ -900,9 +1211,12 @@ export default function CourseWorkspace({
           ) : duplicatePairs.length === 0 ? (
             <div className="py-20 text-center text-xs text-slate-500 bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
               <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-              <p className="font-bold text-slate-300">No duplicate questions found!</p>
+              <p className="font-bold text-slate-300">
+                No duplicate questions found!
+              </p>
               <p className="text-[11px] text-slate-500">
-                All question stems in this course are distinct at the {Math.round(duplicateThreshold * 100)}% threshold.
+                All question stems in this course are distinct at the{" "}
+                {Math.round(duplicateThreshold * 100)}% threshold.
               </p>
             </div>
           ) : (
@@ -931,7 +1245,8 @@ export default function CourseWorkspace({
                         )}
                         {pair.is_conflict && (
                           <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 animate-pulse">
-                            <AlertTriangle className="w-4 h-4 text-rose-400" /> High Priority Conflict: Answers Differ!
+                            <AlertTriangle className="w-4 h-4 text-rose-400" />{" "}
+                            High Priority Conflict: Answers Differ!
                           </span>
                         )}
                       </div>
@@ -949,15 +1264,22 @@ export default function CourseWorkspace({
                       {/* Left Question A */}
                       <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-indigo-400 text-xs">{pair.question_id_a}</span>
+                          <span className="font-mono font-bold text-indigo-400 text-xs">
+                            {pair.question_id_a}
+                          </span>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
                             {pair.type_a}
                           </span>
                         </div>
-                        <p className="text-white font-medium leading-relaxed">{pair.question_a}</p>
+                        <p className="text-white font-medium leading-relaxed">
+                          {pair.question_a}
+                        </p>
                         {pair.correct_a && (
                           <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-slate-800/60">
-                            Answer: <strong className="text-emerald-300">{pair.correct_a}</strong>
+                            Answer:{" "}
+                            <strong className="text-emerald-300">
+                              {pair.correct_a}
+                            </strong>
                           </div>
                         )}
                       </div>
@@ -965,15 +1287,22 @@ export default function CourseWorkspace({
                       {/* Right Question B */}
                       <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-indigo-400 text-xs">{pair.question_id_b}</span>
+                          <span className="font-mono font-bold text-indigo-400 text-xs">
+                            {pair.question_id_b}
+                          </span>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
                             {pair.type_b}
                           </span>
                         </div>
-                        <p className="text-white font-medium leading-relaxed">{pair.question_b}</p>
+                        <p className="text-white font-medium leading-relaxed">
+                          {pair.question_b}
+                        </p>
                         {pair.correct_b && (
                           <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-slate-800/60">
-                            Answer: <strong className="text-emerald-300">{pair.correct_b}</strong>
+                            Answer:{" "}
+                            <strong className="text-emerald-300">
+                              {pair.correct_b}
+                            </strong>
                           </div>
                         )}
                       </div>
@@ -987,187 +1316,223 @@ export default function CourseWorkspace({
       ) : (
         /* Main Questions List Table */
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        {loading ? (
-          <div className="py-20 text-center text-xs text-slate-500">
-            <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            Loading questions...
-          </div>
-        ) : questions.length === 0 ? (
-          <div className="py-20 text-center text-xs text-slate-500 space-y-2">
-            <p>No questions found in this view.</p>
-            <button
-              onClick={() => {
-                setEditingQuestion(null);
-                setIsDrawerOpen(true);
-              }}
-              className="px-4 py-2 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-semibold hover:bg-indigo-600 hover:text-white transition"
-            >
-              + Create First Question
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-800/60 border-b border-slate-800 text-slate-400 uppercase font-semibold text-[11px] tracking-wider">
-                  <th className="py-3 px-4 w-10">
-                    <button
-                      onClick={toggleSelectAll}
-                      className="text-slate-400 hover:text-white"
-                      title="Select all"
-                    >
-                      {selectedIds.length === questions.length ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-400" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="py-3 px-4 w-28">ID</th>
-                  <th className="py-3 px-4 w-24">Type</th>
-                  <th className="py-3 px-4">Question Prompt</th>
-                  <th className="py-3 px-4 w-28">Difficulty</th>
-                  <th className="py-3 px-4 w-32">Section</th>
-                  {activeTab === "needs_review" && (
-                    <th className="py-3 px-4 w-44">Validation Flags</th>
-                  )}
-                  <th className="py-3 px-4 text-right w-24">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {questions.map((q) => {
-                  const isSelected = selectedIds.includes(q.id);
+          {loading ? (
+            <div className="py-20 text-center text-xs text-slate-500">
+              <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Loading questions...
+            </div>
+          ) : questions.length === 0 ? (
+            <div className="py-20 text-center text-xs text-slate-500 space-y-2">
+              <p>No questions found in this view.</p>
+              <button
+                onClick={() => {
+                  setEditingQuestion(null);
+                  setIsDrawerOpen(true);
+                }}
+                className="px-4 py-2 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-semibold hover:bg-indigo-600 hover:text-white transition"
+              >
+                + Create First Question
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-800/60 border-b border-slate-800 text-slate-400 uppercase font-semibold text-[11px] tracking-wider">
+                    <th className="py-3 px-4 w-10">
+                      <button
+                        onClick={toggleSelectAll}
+                        className="text-slate-400 hover:text-white"
+                        title="Select all"
+                      >
+                        {selectedIds.length === questions.length ? (
+                          <CheckSquare className="w-4 h-4 text-indigo-400" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </th>
+                    <th className="py-3 px-4 w-28">ID</th>
+                    <th className="py-3 px-4 w-24">Type</th>
+                    <th className="py-3 px-4">Question Prompt</th>
+                    <th className="py-3 px-4 w-28">Difficulty</th>
+                    <th className="py-3 px-4 w-32">Section</th>
+                    {activeTab === "needs_review" && (
+                      <th className="py-3 px-4 w-44">Validation Flags</th>
+                    )}
+                    <th className="py-3 px-4 text-right w-24">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {questions.map((q) => {
+                    const isSelected = selectedIds.includes(q.id);
 
-                  return (
-                    <tr
-                      key={q.id}
-                      className={`hover:bg-slate-800/40 transition group ${
-                        isSelected ? "bg-indigo-950/20" : ""
-                      }`}
-                    >
-                      <td className="py-3 px-4">
-                        <button
-                          onClick={() => toggleSelectRow(q.id)}
-                          className="text-slate-400 hover:text-white"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-indigo-400" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </button>
-                      </td>
-                      <td className="py-3 px-4 font-mono font-bold text-indigo-400 text-xs tracking-wide">
-                        {q.question_id}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 uppercase">
-                          {q.type}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 max-w-md">
-                        <p className="text-white font-medium line-clamp-2 leading-relaxed">
-                          {q.question}
-                        </p>
-                        {q.type === "objective" && q.correct && (
-                          <span className="text-[11px] text-emerald-400 block mt-0.5 font-mono">
-                            &bull; Ans: {q.correct}
-                          </span>
-                        )}
-                        {q.type === "theory" && q.model_answer && (
-                          <span className="text-[11px] text-amber-400 block mt-0.5 font-mono line-clamp-1">
-                            &bull; Key: {q.model_answer}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border capitalize ${
-                            q.difficulty === "easy"
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                              : q.difficulty === "hard"
-                              ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                              : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                          }`}
-                        >
-                          {q.difficulty || "medium"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px] truncate max-w-[120px]">
-                        {q.section || "—"}
-                      </td>
-                      {activeTab === "needs_review" && (
+                    return (
+                      <tr
+                        key={q.id}
+                        className={`hover:bg-slate-800/40 transition group ${
+                          isSelected ? "bg-indigo-950/20" : ""
+                        } ${q.is_disabled ? "opacity-50" : ""}`}
+                      >
                         <td className="py-3 px-4">
-                          <div className="flex flex-wrap gap-1">
-                            {(q.review_flags || []).map((flag, idx) => (
-                              <span
-                                key={idx}
-                                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                              >
-                                {flag.replace(/_/g, " ")}
+                          <button
+                            onClick={() => toggleSelectRow(q.id)}
+                            className="text-slate-400 hover:text-white"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-indigo-400" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-indigo-400 text-xs tracking-wide">
+                          <div className="flex items-center gap-1.5">
+                            {q.question_id}
+                            {q.is_disabled && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase tracking-wide">
+                                disabled
                               </span>
-                            ))}
+                            )}
                           </div>
                         </td>
-                      )}
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => {
-                              setEditingQuestion(q);
-                              setIsDrawerOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-                            title="Edit question"
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 uppercase">
+                            {q.type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 max-w-md">
+                          <p className="text-white font-medium line-clamp-2 leading-relaxed">
+                            {q.question}
+                          </p>
+                          {q.type === "objective" && q.correct && (
+                            <span className="text-[11px] text-emerald-400 block mt-0.5 font-mono">
+                              &bull; Ans: {q.correct}
+                            </span>
+                          )}
+                          {q.type === "theory" && q.model_answer && (
+                            <span className="text-[11px] text-amber-400 block mt-0.5 font-mono line-clamp-1">
+                              &bull; Key: {q.model_answer}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border capitalize ${
+                              q.difficulty === "easy"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : q.difficulty === "hard"
+                                  ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            }`}
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSingle(q)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
-                            title="Delete question"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                            {q.difficulty || "medium"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px] truncate max-w-[120px]">
+                          {q.section || "—"}
+                        </td>
+                        {activeTab === "needs_review" && (
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1">
+                              {(q.review_flags || []).map((flag, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                >
+                                  {flag.replace(/_/g, " ")}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        )}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                setEditingQuestion(q);
+                                setIsDrawerOpen(true);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                              title="Edit question"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleDisableSingle(q)}
+                              className={`p-1.5 rounded-lg transition ${
+                                q.is_disabled
+                                  ? "text-amber-400 hover:text-emerald-400 hover:bg-slate-800"
+                                  : "text-slate-400 hover:text-amber-400 hover:bg-slate-800"
+                              }`}
+                              title={
+                                q.is_disabled
+                                  ? "Re-enable question"
+                                  : "Disable question"
+                              }
+                            >
+                              {q.is_disabled ? (
+                                <Eye className="w-3.5 h-3.5" />
+                              ) : (
+                                <EyeOff className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSingle(q)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                              title="Delete question"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-        {/* Pagination Bar */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
-          <div>
-            Showing <span className="font-bold text-white">{questions.length > 0 ? (page - 1) * limit + 1 : 0}</span> to{" "}
-            <span className="font-bold text-white">{Math.min(page * limit, totalQuestions)}</span> of{" "}
-            <span className="font-bold text-white">{totalQuestions.toLocaleString()}</span> questions
-          </div>
+          {/* Pagination Bar */}
+          <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+            <div>
+              Showing{" "}
+              <span className="font-bold text-white">
+                {questions.length > 0 ? (page - 1) * limit + 1 : 0}
+              </span>{" "}
+              to{" "}
+              <span className="font-bold text-white">
+                {Math.min(page * limit, totalQuestions)}
+              </span>{" "}
+              of{" "}
+              <span className="font-bold text-white">
+                {totalQuestions.toLocaleString()}
+              </span>{" "}
+              questions
+            </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage(page - 1)}
-              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
-            >
-              <ChevronLeft className="w-4 h-4" /> Prev
-            </button>
-            <span className="font-semibold text-slate-300 px-2">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage(page + 1)}
-              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
-            >
-              Next <ChevronRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage(page - 1)}
+                className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
+              >
+                <ChevronLeft className="w-4 h-4" /> Prev
+              </button>
+              <span className="font-semibold text-slate-300 px-2">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage(page + 1)}
+                className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
 
       {/* Slide-in Question Drawer */}
@@ -1182,6 +1547,136 @@ export default function CourseWorkspace({
         activeCourse={activeCourse}
         existingQuestions={questions}
       />
+
+      {/* Export Modal */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Download className="w-4 h-4 text-emerald-400" />
+                Export Questions
+              </h3>
+              <button
+                onClick={() => setIsExportModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs space-y-4">
+              <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700 text-slate-300 font-mono">
+                <span className="text-indigo-400 font-bold">
+                  {activeCourse.course_code}
+                </span>
+                {" · "}
+                <span className="text-slate-400 uppercase text-[10px]">
+                  {activeCourse.university}
+                </span>
+              </div>
+
+              {/* Format */}
+              <div>
+                <label className="block text-slate-400 font-semibold mb-2">
+                  Export Format
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    {
+                      value: "json",
+                      label: "JSON",
+                      desc: "Re-importable, full data",
+                    },
+                    {
+                      value: "csv",
+                      label: "CSV",
+                      desc: "Spreadsheet-friendly",
+                    },
+                  ].map((f) => (
+                    <button
+                      key={f.value}
+                      onClick={() => setExportFormat(f.value)}
+                      className={`px-3 py-2.5 rounded-xl border text-left transition ${
+                        exportFormat === f.value
+                          ? "bg-indigo-600/20 border-indigo-500 text-white"
+                          : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                      }`}
+                    >
+                      <div className="font-bold">{f.label}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        {f.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Question Type */}
+              <div>
+                <label className="block text-slate-400 font-semibold mb-2">
+                  Question Type
+                </label>
+                <select
+                  value={exportType}
+                  onChange={(e) => setExportType(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                >
+                  <option value="">All types</option>
+                  <option value="objective">Objective (MCQ)</option>
+                  <option value="theory">Theory</option>
+                  <option value="fib">Fill-in-the-Blank</option>
+                </select>
+              </div>
+
+              {/* Include disabled */}
+              <label className="flex items-center gap-3 cursor-pointer p-3 bg-slate-800/60 rounded-xl border border-slate-700 hover:border-slate-600 transition">
+                <input
+                  type="checkbox"
+                  checked={exportIncludeDisabled}
+                  onChange={(e) => setExportIncludeDisabled(e.target.checked)}
+                  className="rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <div className="text-slate-200 font-semibold">
+                    Include disabled questions
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    Export hidden questions as well (they'll be marked in the
+                    file)
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="border-t border-slate-800 pt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setIsExportModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-700 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-60 transition"
+              >
+                {isExporting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    Download {exportFormat.toUpperCase()}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Import Questions Wizard */}
       <BulkImportWizard
