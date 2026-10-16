@@ -9,6 +9,7 @@ import CoursesView from "./components/CoursesView";
 import QuestionBank from "./components/QuestionBank";
 import PremiumView from "./components/PremiumView";
 import ReviewsView from "./components/ReviewsView";
+import ReportsView from "./components/ReportsView";
 import ReferralsView from "./components/ReferralsView";
 import LeaderboardView from "./components/LeaderboardView";
 import AnalyticsView from "./components/AnalyticsView";
@@ -175,6 +176,7 @@ export default function App() {
           )}
           {activeTab === "premium" && <PremiumView />}
           {activeTab === "reviews" && <ReviewsView />}
+          {activeTab === "reports" && <ReportsView />}
           {activeTab === "referrals" && <ReferralsView />}
           {activeTab === "leaderboard" && <LeaderboardView />}
           {activeTab === "analytics" && <AnalyticsView />}

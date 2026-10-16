@@ -3,13 +3,19 @@ import {
   Users, Crown, BookOpen, AlertTriangle, TrendingUp, GraduationCap,
   CheckCircle, Sparkles, RefreshCw, HelpCircle, Share2, Bell,
   ArrowRight, Shield, Activity, Zap, UserCheck, Package, Clock,
-  FileText, BarChart3
+  FileText, BarChart3, Flag, MessageSquare
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 
 export default function DashboardView({ onNavigate }) {
   const [stats, setStats] = useState(null);
+  const [messagingStats, setMessagingStats] = useState({
+    total_connections: 0,
+    messages_today: 0,
+    pending_reports: 0,
+    reports_this_week: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   const loadStats = async () => {
@@ -21,6 +27,31 @@ export default function DashboardView({ onNavigate }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setStats(await res.json());
+
+      // Load messaging & moderation stats
+      try {
+        const { data: rpcStats } = await supabase.rpc("get_messaging_stats");
+        if (rpcStats) {
+          setMessagingStats(rpcStats);
+        } else {
+          const [
+            { count: connCount },
+            { count: msgCount },
+            { count: repCount }
+          ] = await Promise.all([
+            supabase.from("connections").select("*", { count: "exact", head: true }).eq("state", "accepted"),
+            supabase.from("messages").select("*", { count: "exact", head: true }).gte("created_at", new Date(new Date().setHours(0,0,0,0)).toISOString()),
+            supabase.from("reports").select("*", { count: "exact", head: true }).eq("status", "pending"),
+          ]);
+          setMessagingStats({
+            total_connections: connCount || 0,
+            messages_today: msgCount || 0,
+            pending_reports: repCount || 0,
+          });
+        }
+      } catch (err) {
+        console.warn("Notice loading messaging stats:", err);
+      }
     } catch (err) {
       console.error("Error loading dashboard stats:", err);
     } finally {
@@ -178,6 +209,37 @@ export default function DashboardView({ onNavigate }) {
           loading={loading}
           onClick={() => onNavigate("reviews")}
           valueColor={kpis.pendingReviews > 0 ? "text-orange-400" : "text-emerald-400"}
+        />
+      </div>
+
+      {/* ── Messaging & Moderation Grid ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <KpiCard
+          icon={<Flag className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />}
+          label="Reports Pending"
+          value={messagingStats.pending_reports}
+          sub="Safety reports awaiting action"
+          loading={loading}
+          onClick={() => onNavigate("reports")}
+          valueColor={messagingStats.pending_reports > 0 ? "text-rose-400" : "text-emerald-400"}
+        />
+        <KpiCard
+          icon={<Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />}
+          label="Active Connections"
+          value={messagingStats.total_connections}
+          sub="Scholars chatting & connecting"
+          loading={loading}
+          onClick={() => onNavigate("reports")}
+          valueColor="text-indigo-400"
+        />
+        <KpiCard
+          icon={<MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />}
+          label="Messages Today"
+          value={messagingStats.messages_today}
+          sub="Direct peer discussions"
+          loading={loading}
+          onClick={() => onNavigate("reports")}
+          valueColor="text-emerald-400"
         />
       </div>
 

@@ -18,6 +18,7 @@ import {
   Shield,
   X,
   Megaphone,
+  Flag,
 } from "lucide-react";
 import Logo from "../images/Logo";
 
@@ -40,6 +41,7 @@ export default function Sidebar({
     { id: "questions", label: "Question Bank", icon: HelpCircle },
     { id: "premium", label: "Monetization & Codes", icon: Crown },
     { id: "reviews", label: "Testimonials Moderation", icon: MessageSquare },
+    { id: "reports", label: "Reports & Moderation", icon: Flag },
     { id: "referrals", label: "Referrals & Growth", icon: Share2 },
     { id: "leaderboard", label: "Leaderboards", icon: Award },
     { id: "analytics", label: "Analytics & Telemetry", icon: BarChart3 },
