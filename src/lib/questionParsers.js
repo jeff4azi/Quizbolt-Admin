@@ -45,6 +45,14 @@ export const sanitizeQuestion = (raw, defaults = {}) => {
   }
   if (!Array.isArray(answers) && (type === "fib" || type === "matching")) {
     answers = [];
+  } else if (type === "fib" && Array.isArray(answers)) {
+    // Ensure FIB answers preserve nested gap arrays cleanly
+    answers = answers.map((item) => {
+      if (Array.isArray(item)) {
+        return item.map((s) => String(s || "").trim()).filter(Boolean);
+      }
+      return [String(item || "").trim()].filter(Boolean);
+    }).filter((group) => group.length > 0);
   }
 
   let keywords = raw.keywords;

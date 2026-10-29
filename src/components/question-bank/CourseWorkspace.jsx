@@ -1415,6 +1415,11 @@ export default function CourseWorkspace({
                               &bull; Key: {q.model_answer}
                             </span>
                           )}
+                          {q.type === "fib" && Array.isArray(q.answers) && q.answers.length > 0 && (
+                            <span className="text-[11px] text-purple-400 block mt-0.5 font-mono line-clamp-1">
+                              &bull; Blanks: {q.answers.map((g) => (Array.isArray(g) ? g.join(" / ") : g)).join(", ")}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           <span

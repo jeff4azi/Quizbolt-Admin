@@ -64,9 +64,28 @@ export const validateQuestion = (q) => {
     }
   } else if (q.type === "fib") {
     // Rule 7: FIB with missing or empty answers
-    if (!Array.isArray(q.answers) || q.answers.length === 0) {
+    const hasValidAnswers =
+      Array.isArray(q.answers) &&
+      q.answers.length > 0 &&
+      q.answers.some((group) => {
+        if (Array.isArray(group)) {
+          return group.some((v) => String(v || "").trim().length > 0);
+        }
+        return String(group || "").trim().length > 0;
+      });
+
+    if (!hasValidAnswers) {
       errors.push("Fill-in-the-blank requires at least one accepted answer.");
       flags.push("no_fib_answers");
+    } else {
+      const gapMatches = (q.question || "").match(/_{2,}/g);
+      const gapCount = gapMatches && gapMatches.length > 0 ? gapMatches.length : 1;
+      if (gapCount > 1 && q.answers.length !== gapCount) {
+        warnings.push(
+          `Question text contains ${gapCount} blanks (_____), but ${q.answers.length} answer groups are defined.`
+        );
+        flags.push("fib_gap_count_mismatch");
+      }
     }
   } else if (q.type === "theory") {
     // Rule 8: Theory with missing model answer

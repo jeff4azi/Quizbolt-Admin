@@ -16,6 +16,75 @@ import { deriveNextQuestionId, validateQuestion } from "../../lib/questionValida
 import { supabase } from "../../lib/supabaseClient";
 import { API_BASE_URL } from "../../config/apiConfig";
 
+// Count blanks in FIB question (sequences of 2+ underscores)
+const countFibGaps = (text) => {
+  if (!text || typeof text !== "string") return 1;
+  const matches = text.match(/_{2,}/g);
+  return matches && matches.length > 0 ? matches.length : 1;
+};
+
+// Normalize raw answers into array of arrays per gap
+const parseRawFibToGroups = (rawAnswers, gapCount) => {
+  const targetCount = Math.max(1, gapCount);
+  if (!rawAnswers) {
+    return Array.from({ length: targetCount }, () => [""]);
+  }
+
+  let parsed = rawAnswers;
+  if (typeof rawAnswers === "string") {
+    try {
+      parsed = JSON.parse(rawAnswers);
+    } catch {
+      parsed = rawAnswers.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    return Array.from({ length: targetCount }, () => [""]);
+  }
+
+  // Already array of arrays: [[...], [...]]
+  if (parsed.some((item) => Array.isArray(item))) {
+    const groups = parsed.map((item) => {
+      if (Array.isArray(item)) {
+        const clean = item.map((s) => String(s || "").trim()).filter(Boolean);
+        return clean.length ? clean : [""];
+      }
+      const str = String(item || "").trim();
+      return str ? [str] : [""];
+    });
+
+    if (targetCount === 1 && groups.length > 1) {
+      // Consolidate into 1 group if only 1 gap exists in question
+      const merged = Array.from(new Set(groups.flat())).filter(Boolean);
+      return [merged.length ? merged : [""]];
+    }
+
+    while (groups.length < targetCount) groups.push([""]);
+    return groups.slice(0, targetCount);
+  }
+
+  // Flat array of strings: e.g. ["Paris", "France"] or ["third", "3rd"]
+  if (targetCount > 1 && parsed.length >= targetCount) {
+    const groups = [];
+    for (let i = 0; i < targetCount; i++) {
+      const val = String(parsed[i] || "").trim();
+      groups.push(val ? [val] : [""]);
+    }
+    return groups;
+  }
+
+  // If only 1 gap exists, all strings in flat array are alternative variations for that 1 gap
+  if (targetCount === 1) {
+    const cleaned = parsed.map((s) => String(s || "").trim()).filter(Boolean);
+    return [cleaned.length ? cleaned : [""]];
+  }
+
+  const groups = parsed.map((item) => [String(item || "").trim() || ""]);
+  while (groups.length < targetCount) groups.push([""]);
+  return groups.slice(0, targetCount);
+};
+
 export default function QuestionDrawer({
   isOpen,
   onClose,
@@ -45,8 +114,9 @@ export default function QuestionDrawer({
   const [keywords, setKeywords] = useState([]);
   const [newKeyword, setNewKeyword] = useState("");
 
-  // FIB state
-  const [fibAnswers, setFibAnswers] = useState([""]);
+  // FIB state: array of variation arrays per gap
+  const [fibGapGroups, setFibGapGroups] = useState([[""]]);
+  const detectedFibGaps = countFibGaps(stem);
 
   // Matching state
   const [matchPrompt, setMatchPrompt] = useState("");
@@ -146,10 +216,11 @@ export default function QuestionDrawer({
       setKeywords(Array.isArray(question.keywords) ? question.keywords : []);
 
       // FIB
-      if (question.type === "fib" && Array.isArray(question.answers)) {
-        setFibAnswers(question.answers);
+      if (question.type === "fib" && question.answers) {
+        const detected = countFibGaps(question.question);
+        setFibGapGroups(parseRawFibToGroups(question.answers, detected));
       } else {
-        setFibAnswers([""]);
+        setFibGapGroups([[""]]);
       }
 
       // Matching
@@ -179,7 +250,7 @@ export default function QuestionDrawer({
       setCorrect("");
       setModelAnswer("");
       setKeywords([]);
-      setFibAnswers([""]);
+      setFibGapGroups([[""]]);
       setMatchPrompt("");
       setMatchingPairs([
         { key: "", value: "" },
@@ -250,20 +321,65 @@ export default function QuestionDrawer({
     setKeywords(keywords.filter((k) => k !== kw));
   };
 
+  // Synchronize FIB gap groups with number of dashes in stem
+  useEffect(() => {
+    if (type !== "fib") return;
+    const detected = countFibGaps(stem);
+
+    setFibGapGroups((prev) => {
+      // If only 1 gap is available, do not add/allow extra groups
+      if (detected === 1 && prev.length > 1) {
+        const consolidated = Array.from(new Set(prev.flat())).filter(Boolean);
+        return [consolidated.length ? consolidated : [""]];
+      }
+      if (prev.length < detected) {
+        const next = [...prev];
+        while (next.length < detected) next.push([""]);
+        return next;
+      }
+      if (prev.length > detected) {
+        return prev.slice(0, detected);
+      }
+      return prev;
+    });
+  }, [stem, type]);
+
   // FIB answer handlers
-  const handleFibChange = (idx, value) => {
-    const updated = [...fibAnswers];
-    updated[idx] = value;
-    setFibAnswers(updated);
+  const handleFibVariationChange = (gapIdx, varIdx, value) => {
+    setFibGapGroups((prev) =>
+      prev.map((group, gIdx) => {
+        if (gIdx !== gapIdx) return group;
+        const next = [...group];
+        next[varIdx] = value;
+        return next;
+      })
+    );
   };
 
-  const addFibAnswer = () => {
-    setFibAnswers([...fibAnswers, ""]);
+  const addFibVariation = (gapIdx) => {
+    setFibGapGroups((prev) =>
+      prev.map((group, gIdx) => {
+        if (gIdx !== gapIdx) return group;
+        return [...group, ""];
+      })
+    );
   };
 
-  const removeFibAnswer = (idx) => {
-    if (fibAnswers.length <= 1) return;
-    setFibAnswers(fibAnswers.filter((_, i) => i !== idx));
+  const removeFibVariation = (gapIdx, varIdx) => {
+    setFibGapGroups((prev) =>
+      prev.map((group, gIdx) => {
+        if (gIdx !== gapIdx) return group;
+        if (group.length <= 1) return [""];
+        return group.filter((_, vIdx) => vIdx !== varIdx);
+      })
+    );
+  };
+
+  const insertGapIntoStem = () => {
+    setStem((prev) => {
+      const sep = prev && !prev.endsWith(" ") ? " " : "";
+      return prev ? `${prev}${sep}_____` : "_____";
+    });
   };
 
   // Matching pair handlers
@@ -312,8 +428,13 @@ export default function QuestionDrawer({
       payload.model_answer = modelAnswer.trim() || null;
       payload.keywords = keywords.length > 0 ? keywords : null;
     } else if (type === "fib") {
-      const cleanFib = fibAnswers.map((a) => a.trim()).filter(Boolean);
-      payload.answers = cleanFib;
+      const detected = countFibGaps(stem);
+      const cleanGroups = fibGapGroups
+        .slice(0, detected)
+        .map((group) => group.map((v) => v.trim()).filter(Boolean))
+        .filter((group) => group.length > 0);
+
+      payload.answers = cleanGroups.length > 0 ? cleanGroups : [];
     } else if (type === "matching") {
       payload.match_prompt = matchPrompt.trim() || null;
       payload.answers = matchingPairs.filter((p) => p.key.trim() && p.value.trim());
@@ -449,9 +570,21 @@ export default function QuestionDrawer({
 
           {/* Stem / Question Text */}
           <div>
-            <label className="block text-slate-400 font-semibold mb-1.5 uppercase text-[10px] tracking-wider">
-              Question Stem <span className="text-rose-400">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                Question Stem <span className="text-rose-400">*</span>
+              </label>
+              {type === "fib" && (
+                <button
+                  type="button"
+                  onClick={insertGapIntoStem}
+                  className="px-2 py-0.5 rounded bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-300 text-[10px] font-mono font-bold flex items-center gap-1 transition"
+                  title="Insert a blank gap '_____' into the question text"
+                >
+                  <Plus className="w-3 h-3" /> Insert Gap (_____)
+                </button>
+              )}
+            </div>
             <textarea
               required
               rows={4}
@@ -611,48 +744,118 @@ export default function QuestionDrawer({
           )}
 
           {type === "fib" && (
-            <div className="space-y-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800/80">
+            <div className="space-y-4 bg-slate-900/40 p-4 rounded-xl border border-slate-800/80">
               <div className="flex items-center justify-between">
-                <label className="text-slate-300 font-bold uppercase text-[10px] tracking-wider">
-                  Accepted Answers
-                </label>
-                <span className="text-[10px] text-slate-500">
-                  Multiple variations acceptable (case-insensitive in testing)
+                <div>
+                  <label className="text-slate-300 font-bold uppercase text-[10px] tracking-wider block">
+                    Accepted Answers per Gap
+                  </label>
+                  <span className="text-[10px] text-slate-500">
+                    {detectedFibGaps === 1
+                      ? "1 gap detected (_____). All variations below are accepted for this blank."
+                      : `${detectedFibGaps} gaps detected in question. Configure accepted variations per blank.`}
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-indigo-950 border border-indigo-800/60 text-indigo-300 font-mono text-[10px] font-bold">
+                  {detectedFibGaps} {detectedFibGaps === 1 ? "Gap" : "Gaps"}
                 </span>
               </div>
 
-              <div className="space-y-2">
-                {fibAnswers.map((ans, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <span className="font-mono text-slate-400 text-xs w-4">#{idx + 1}</span>
-                    <input
-                      type="text"
-                      required
-                      value={ans}
-                      onChange={(e) => handleFibChange(idx, e.target.value)}
-                      placeholder={`Accepted answer ${idx + 1}`}
-                      className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                    />
-                    {fibAnswers.length > 1 && (
+              {detectedFibGaps === 1 ? (
+                /* Single Gap: List of alternative variations */
+                <div className="space-y-2">
+                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/60 text-[11px] text-slate-400">
+                    💡 Only 1 gap exists in this question. Extra gap groups cannot be added. If you need a second gap, click <strong className="text-indigo-300">Insert Gap (_____)</strong> above.
+                  </div>
+                  {(fibGapGroups[0] || [""]).map((ans, varIdx) => (
+                    <div key={varIdx} className="flex items-center gap-2">
+                      <span className="font-mono text-slate-500 text-xs w-5">#{varIdx + 1}</span>
+                      <input
+                        type="text"
+                        required
+                        value={ans}
+                        onChange={(e) => handleFibVariationChange(0, varIdx, e.target.value)}
+                        placeholder={`Accepted variation ${varIdx + 1} (e.g. 'third' or '3rd')`}
+                        className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-xs"
+                      />
+                      {(fibGapGroups[0] || []).length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeFibVariation(0, varIdx)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 transition"
+                          title="Remove this variation"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => addFibVariation(0)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition mt-2"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Alternative Variation
+                  </button>
+                </div>
+              ) : (
+                /* Multiple Gaps: Render a dedicated card for each gap */
+                <div className="space-y-3">
+                  {fibGapGroups.slice(0, detectedFibGaps).map((group, gapIdx) => (
+                    <div
+                      key={gapIdx}
+                      className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-400 font-mono">
+                          Gap #{gapIdx + 1} (Dash #{gapIdx + 1})
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          {group.length} accepted {group.length === 1 ? "variation" : "variations"}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {group.map((ans, varIdx) => (
+                          <div key={varIdx} className="flex items-center gap-2">
+                            <span className="font-mono text-slate-500 text-[11px] w-4">
+                              {varIdx + 1}.
+                            </span>
+                            <input
+                              type="text"
+                              required
+                              value={ans}
+                              onChange={(e) =>
+                                handleFibVariationChange(gapIdx, varIdx, e.target.value)
+                              }
+                              placeholder={`Accepted answer for Gap ${gapIdx + 1} (variation ${varIdx + 1})`}
+                              className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-xs"
+                            />
+                            {group.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeFibVariation(gapIdx, varIdx)}
+                                className="p-1 text-slate-500 hover:text-rose-400 transition"
+                                title="Remove this variation"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => removeFibAnswer(idx)}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 transition"
+                        onClick={() => addFibVariation(gapIdx)}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md text-[10px] font-semibold flex items-center gap-1 transition mt-1"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Plus className="w-3 h-3" /> Add Alternative Variation for Gap #{gapIdx + 1}
                       </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={addFibAnswer}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition mt-2"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Accepted Variation
-              </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
