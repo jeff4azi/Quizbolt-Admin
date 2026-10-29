@@ -23,6 +23,7 @@ import {
   Sparkles,
   EyeOff,
   Eye,
+  Loader2,
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
 import { supabase } from "../../lib/supabaseClient";
@@ -374,6 +375,7 @@ export default function CourseWorkspace({
 
     fetchQuestions();
     fetchCounts();
+    fetchDuplicates();
   };
 
   // Custom confirm dialog state
@@ -452,6 +454,7 @@ export default function CourseWorkspace({
         clearInterval(undoTimerRef.current);
         setUndoToast(null);
         fetchCounts();
+        fetchDuplicates();
       } else {
         setUndoToast((prev) =>
           prev ? { ...prev, secondsLeft: countdown } : null,
@@ -491,6 +494,94 @@ export default function CourseWorkspace({
     } finally {
       fetchQuestions();
       fetchCounts();
+      fetchDuplicates();
+    }
+  };
+
+  // Resolving state for duplicate card actions (keyed by pair)
+  const [resolvingDuplicate, setResolvingDuplicate] = useState(null);
+
+  // Helper to fetch full question row by question_id (from memory or Supabase)
+  const fetchQuestionByQuestionId = async (qid) => {
+    const local = questions.find((q) => q.question_id === qid);
+    if (local) return local;
+
+    try {
+      const { data, error } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("university", activeCourse.university)
+        .eq("course_code", activeCourse.course_code)
+        .eq("question_id", qid)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error(`Failed to fetch question ${qid}:`, err);
+      return null;
+    }
+  };
+
+  // Action 2: Direct Edit A or B from duplicate card
+  const handleEditDuplicateQuestion = async (qid) => {
+    const fullQuestion = await fetchQuestionByQuestionId(qid);
+    if (!fullQuestion) {
+      setNotification({
+        type: "error",
+        message: `Could not load question "${qid}" for editing.`,
+      });
+      return;
+    }
+    setEditingQuestion(fullQuestion);
+    setIsDrawerOpen(true);
+  };
+
+  // Action 1: One-click resolution (Keep A & Delete B, or Keep B & Delete A)
+  const handleResolveDuplicatePair = async (pair, keepSide) => {
+    const keepId = keepSide === "A" ? pair.question_id_a : pair.question_id_b;
+    const deleteId = keepSide === "A" ? pair.question_id_b : pair.question_id_a;
+    const pairKey = `${pair.question_id_a}_${pair.question_id_b}`;
+
+    setResolvingDuplicate(pairKey);
+    try {
+      const qToDelete = await fetchQuestionByQuestionId(deleteId);
+      if (!qToDelete) {
+        setNotification({
+          type: "error",
+          message: `Question "${deleteId}" could not be found to delete.`,
+        });
+        return;
+      }
+
+      // 1. Optimistically remove the pair from duplicatePairs UI
+      setDuplicatePairs((prev) =>
+        prev.filter(
+          (p) =>
+            !(
+              (p.question_id_a === pair.question_id_a && p.question_id_b === pair.question_id_b) ||
+              (p.question_id_a === pair.question_id_b && p.question_id_b === pair.question_id_a)
+            )
+        )
+      );
+      setDuplicatePairsCount((prev) => Math.max(0, prev - 1));
+
+      // 2. Execute deletion with undo window
+      await executeDeleteWithUndo([qToDelete]);
+
+      setNotification({
+        type: "success",
+        message: `Kept ${keepId} and deleted duplicate ${deleteId}. (10s undo window active)`,
+      });
+    } catch (err) {
+      console.error("Failed to resolve duplicate pair:", err);
+      setNotification({
+        type: "error",
+        message: err.message || "Failed to resolve duplicate.",
+      });
+      fetchDuplicates();
+    } finally {
+      setResolvingDuplicate(null);
     }
   };
 
@@ -1232,9 +1323,9 @@ export default function CourseWorkspace({
                         : "bg-slate-900 border-slate-800"
                     }`}
                   >
-                    {/* Header Badges & Dismiss Action */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs border-b border-slate-800/80 pb-3">
-                      <div className="flex items-center gap-2">
+                    {/* Header Badges & Resolution Actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs border-b border-slate-800/80 pb-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
                           {simPct}% Similarity
                         </span>
@@ -1251,33 +1342,80 @@ export default function CourseWorkspace({
                         )}
                       </div>
 
-                      <button
-                        onClick={() => handleDismissDuplicate(pair)}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold border border-slate-700 transition"
-                      >
-                        Not a Duplicate
-                      </button>
+                      {/* Action 1 (Keep & Delete) and Not a Duplicate */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          disabled={resolvingDuplicate === `${pair.question_id_a}_${pair.question_id_b}`}
+                          onClick={() => handleResolveDuplicatePair(pair, "A")}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 rounded-xl text-xs font-semibold border border-emerald-500/30 transition disabled:opacity-50"
+                          title={`Keep ${pair.question_id_a} and delete duplicate ${pair.question_id_b} (10s undo window)`}
+                        >
+                          {resolvingDuplicate === `${pair.question_id_a}_${pair.question_id_b}` ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          )}
+                          <span>Keep <span className="font-mono">{pair.question_id_a}</span></span>
+                          <span className="text-[10px] text-emerald-400/70 font-normal">(Del {pair.question_id_b})</span>
+                        </button>
+
+                        <button
+                          disabled={resolvingDuplicate === `${pair.question_id_a}_${pair.question_id_b}`}
+                          onClick={() => handleResolveDuplicatePair(pair, "B")}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 rounded-xl text-xs font-semibold border border-emerald-500/30 transition disabled:opacity-50"
+                          title={`Keep ${pair.question_id_b} and delete duplicate ${pair.question_id_a} (10s undo window)`}
+                        >
+                          {resolvingDuplicate === `${pair.question_id_a}_${pair.question_id_b}` ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          )}
+                          <span>Keep <span className="font-mono">{pair.question_id_b}</span></span>
+                          <span className="text-[10px] text-emerald-400/70 font-normal">(Del {pair.question_id_a})</span>
+                        </button>
+
+                        <button
+                          disabled={resolvingDuplicate === `${pair.question_id_a}_${pair.question_id_b}`}
+                          onClick={() => handleDismissDuplicate(pair)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 transition disabled:opacity-50"
+                          title="Mark this pair as false positive"
+                        >
+                          Not a Duplicate
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Side-by-side comparison */}
+                    {/* Side-by-side comparison with Action 2: Direct Edit */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
                       {/* Left Question A */}
-                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-indigo-400 text-xs">
-                            {pair.question_id_a}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
-                            {pair.type_a}
-                          </span>
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5 flex flex-col justify-between">
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-indigo-400 text-xs">
+                                {pair.question_id_a}
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
+                                {pair.type_a}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => handleEditDuplicateQuestion(pair.question_id_a)}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-indigo-300 border border-slate-700/80 hover:border-indigo-500/40 text-[11px] font-medium transition"
+                              title={`Edit ${pair.question_id_a} directly in Question Drawer`}
+                            >
+                              <Edit2 className="w-3 h-3 text-indigo-400" />
+                              <span>Edit {pair.question_id_a}</span>
+                            </button>
+                          </div>
+                          <p className="text-white font-medium leading-relaxed">
+                            {pair.question_a}
+                          </p>
                         </div>
-                        <p className="text-white font-medium leading-relaxed">
-                          {pair.question_a}
-                        </p>
                         {pair.correct_a && (
-                          <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-slate-800/60">
+                          <div className="text-[11px] text-emerald-400 font-mono pt-2 border-t border-slate-800/60">
                             Answer:{" "}
-                            <strong className="text-emerald-300">
+                            <strong className="text-emerald-300 font-sans">
                               {pair.correct_a}
                             </strong>
                           </div>
@@ -1285,22 +1423,34 @@ export default function CourseWorkspace({
                       </div>
 
                       {/* Right Question B */}
-                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-indigo-400 text-xs">
-                            {pair.question_id_b}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
-                            {pair.type_b}
-                          </span>
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5 flex flex-col justify-between">
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-indigo-400 text-xs">
+                                {pair.question_id_b}
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-300">
+                                {pair.type_b}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => handleEditDuplicateQuestion(pair.question_id_b)}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-indigo-300 border border-slate-700/80 hover:border-indigo-500/40 text-[11px] font-medium transition"
+                              title={`Edit ${pair.question_id_b} directly in Question Drawer`}
+                            >
+                              <Edit2 className="w-3 h-3 text-indigo-400" />
+                              <span>Edit {pair.question_id_b}</span>
+                            </button>
+                          </div>
+                          <p className="text-white font-medium leading-relaxed">
+                            {pair.question_b}
+                          </p>
                         </div>
-                        <p className="text-white font-medium leading-relaxed">
-                          {pair.question_b}
-                        </p>
                         {pair.correct_b && (
-                          <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-slate-800/60">
+                          <div className="text-[11px] text-emerald-400 font-mono pt-2 border-t border-slate-800/60">
                             Answer:{" "}
-                            <strong className="text-emerald-300">
+                            <strong className="text-emerald-300 font-sans">
                               {pair.correct_b}
                             </strong>
                           </div>
