@@ -85,6 +85,53 @@ const parseRawFibToGroups = (rawAnswers, gapCount) => {
   return groups.slice(0, targetCount);
 };
 
+// Normalize raw keywords into array of variation arrays (concept groups with synonyms)
+const parseRawTheoryKeywordsToGroups = (rawKeywords) => {
+  if (!rawKeywords) return [];
+
+  let parsed = rawKeywords;
+  if (typeof rawKeywords === "string") {
+    const trimmed = rawKeywords.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        parsed = trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    } else {
+      parsed = trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  if (!Array.isArray(parsed) || parsed.length === 0) return [];
+
+  const groups = [];
+  for (const item of parsed) {
+    if (Array.isArray(item)) {
+      // Array of synonyms: ["mitochondria", "powerhouse of the cell"]
+      const clean = item.map((s) => String(s || "").trim()).filter(Boolean);
+      if (clean.length > 0) groups.push(clean);
+    } else if (typeof item === "string" && item.trim()) {
+      const sub = item.split(",").map((s) => s.trim()).filter(Boolean);
+      if (sub.length > 1) {
+        for (const s of sub) groups.push([s]);
+      } else {
+        groups.push([item.trim()]);
+      }
+    } else if (item && typeof item === "object") {
+      const label = item.primary || item.keyword || item.label || "";
+      const terms = Array.isArray(item.terms)
+        ? item.terms.map((t) => String(t || "").trim()).filter(Boolean)
+        : [];
+      const merged = Array.from(new Set([label, ...terms].filter(Boolean)));
+      if (merged.length > 0) groups.push(merged);
+    }
+  }
+
+  return groups;
+};
+
 export default function QuestionDrawer({
   isOpen,
   onClose,
@@ -109,10 +156,11 @@ export default function QuestionDrawer({
   const [options, setOptions] = useState(["", "", "", ""]);
   const [correct, setCorrect] = useState("");
 
-  // Theory state
+  // Theory state: concept groups with synonyms (array of string arrays)
   const [modelAnswer, setModelAnswer] = useState("");
-  const [keywords, setKeywords] = useState([]);
-  const [newKeyword, setNewKeyword] = useState("");
+  const [theoryConceptGroups, setTheoryConceptGroups] = useState([]);
+  const [newConceptPrimary, setNewConceptPrimary] = useState("");
+  const [newSynonymInputs, setNewSynonymInputs] = useState({});
 
   // FIB state: array of variation arrays per gap
   const [fibGapGroups, setFibGapGroups] = useState([[""]]);
@@ -213,7 +261,9 @@ export default function QuestionDrawer({
 
       // Theory
       setModelAnswer(question.model_answer || "");
-      setKeywords(Array.isArray(question.keywords) ? question.keywords : []);
+      setTheoryConceptGroups(parseRawTheoryKeywordsToGroups(question.keywords));
+      setNewConceptPrimary("");
+      setNewSynonymInputs({});
 
       // FIB
       if (question.type === "fib" && question.answers) {
@@ -249,7 +299,9 @@ export default function QuestionDrawer({
       setOptions(["", "", "", ""]);
       setCorrect("");
       setModelAnswer("");
-      setKeywords([]);
+      setTheoryConceptGroups([]);
+      setNewConceptPrimary("");
+      setNewSynonymInputs({});
       setFibGapGroups([[""]]);
       setMatchPrompt("");
       setMatchingPairs([
@@ -309,16 +361,48 @@ export default function QuestionDrawer({
     }
   };
 
-  // Keywords handlers for Theory
-  const addKeyword = () => {
-    if (newKeyword.trim() && !keywords.includes(newKeyword.trim())) {
-      setKeywords([...keywords, newKeyword.trim()]);
-      setNewKeyword("");
+  // Theory Concept Groups & Synonyms handlers
+  const addTheoryConceptGroup = () => {
+    const trimmed = newConceptPrimary.trim();
+    if (!trimmed) return;
+
+    // Check if concept group or synonym already exists
+    const exists = theoryConceptGroups.some((group) =>
+      group.some((term) => term.toLowerCase() === trimmed.toLowerCase())
+    );
+    if (!exists) {
+      setTheoryConceptGroups((prev) => [...prev, [trimmed]]);
     }
+    setNewConceptPrimary("");
   };
 
-  const removeKeyword = (kw) => {
-    setKeywords(keywords.filter((k) => k !== kw));
+  const removeTheoryConceptGroup = (groupIndex) => {
+    setTheoryConceptGroups((prev) => prev.filter((_, idx) => idx !== groupIndex));
+  };
+
+  const addSynonymToGroup = (groupIndex) => {
+    const val = (newSynonymInputs[groupIndex] || "").trim();
+    if (!val) return;
+
+    setTheoryConceptGroups((prev) =>
+      prev.map((group, idx) => {
+        if (idx !== groupIndex) return group;
+        if (group.some((t) => t.toLowerCase() === val.toLowerCase())) return group;
+        return [...group, val];
+      })
+    );
+    setNewSynonymInputs((prev) => ({ ...prev, [groupIndex]: "" }));
+  };
+
+  const removeSynonymFromGroup = (groupIndex, termIndex) => {
+    setTheoryConceptGroups((prev) =>
+      prev
+        .map((group, idx) => {
+          if (idx !== groupIndex) return group;
+          return group.filter((_, tIdx) => tIdx !== termIndex);
+        })
+        .filter((group) => group.length > 0)
+    );
   };
 
   // Synchronize FIB gap groups with number of dashes in stem
@@ -426,7 +510,10 @@ export default function QuestionDrawer({
       payload.correct = correct.trim() || null;
     } else if (type === "theory") {
       payload.model_answer = modelAnswer.trim() || null;
-      payload.keywords = keywords.length > 0 ? keywords : null;
+      const cleanGroups = theoryConceptGroups
+        .map((group) => group.map((s) => String(s || "").trim()).filter(Boolean))
+        .filter((group) => group.length > 0);
+      payload.keywords = cleanGroups.length > 0 ? cleanGroups : null;
     } else if (type === "fib") {
       const detected = countFibGaps(stem);
       const cleanGroups = fibGapGroups
@@ -699,44 +786,140 @@ export default function QuestionDrawer({
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-bold uppercase text-[10px] tracking-wider mb-1.5">
-                  Grading Keywords / Key Concepts
-                </label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-slate-300 font-bold uppercase text-[10px] tracking-wider">
+                      Grading Keywords & Concept Groups
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Each group is a required concept. Add synonyms so students receive full credit regardless of phrasing.
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-mono text-indigo-400 bg-indigo-950/60 border border-indigo-800/60 px-2 py-0.5 rounded-md">
+                    {theoryConceptGroups.length} concept{theoryConceptGroups.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                {/* Add new concept group input */}
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={newKeyword}
-                    onChange={(e) => setNewKeyword(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addKeyword())}
-                    placeholder="Type keyword and press Enter or Add..."
-                    className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                    value={newConceptPrimary}
+                    onChange={(e) => setNewConceptPrimary(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTheoryConceptGroup())}
+                    placeholder="New concept / primary keyword (e.g., mitochondria)..."
+                    className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
                   />
                   <button
                     type="button"
-                    onClick={addKeyword}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold"
+                    onClick={addTheoryConceptGroup}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition"
                   >
-                    Add
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Concept</span>
                   </button>
                 </div>
-                {keywords.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2.5">
-                    {keywords.map((kw, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2.5 py-1 bg-indigo-950/60 text-indigo-300 border border-indigo-800/60 rounded-lg flex items-center gap-1.5 text-xs font-mono"
-                      >
-                        {kw}
-                        <button
-                          type="button"
-                          onClick={() => removeKeyword(kw)}
-                          className="hover:text-rose-400"
+
+                {/* Concept Group Cards */}
+                {theoryConceptGroups.length > 0 ? (
+                  <div className="space-y-2.5 mt-2">
+                    {theoryConceptGroups.map((group, gIdx) => {
+                      const primary = group[0] || "";
+                      const synonyms = group.slice(1);
+                      const synInputVal = newSynonymInputs[gIdx] || "";
+
+                      return (
+                        <div
+                          key={gIdx}
+                          className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/90 space-y-2.5 shadow-sm"
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/80">
+                                Concept #{gIdx + 1}
+                              </span>
+                              <span className="text-xs font-bold text-white">
+                                {primary}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeTheoryConceptGroup(gIdx)}
+                              className="text-slate-400 hover:text-rose-400 p-1 rounded-lg transition"
+                              title="Delete concept group"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Synonyms list */}
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                              Accepted Phrasings & Synonyms:
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {/* Primary tag */}
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-900/40 text-indigo-200 border border-indigo-700/60 rounded-lg text-xs font-medium">
+                                <span className="font-semibold">{primary}</span>
+                                <span className="text-[9px] text-indigo-300/70 font-mono">(primary)</span>
+                              </span>
+
+                              {/* Synonyms */}
+                              {synonyms.map((syn, sIdx) => (
+                                <span
+                                  key={sIdx}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium group"
+                                >
+                                  <span>{syn}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSynonymFromGroup(gIdx, sIdx + 1)}
+                                    className="text-slate-400 hover:text-rose-400 transition"
+                                    title="Remove synonym"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Add synonym in-line input */}
+                          <div className="flex gap-2 pt-1">
+                            <input
+                              type="text"
+                              value={synInputVal}
+                              onChange={(e) =>
+                                setNewSynonymInputs((prev) => ({
+                                  ...prev,
+                                  [gIdx]: e.target.value,
+                                }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  addSynonymToGroup(gIdx);
+                                }
+                              }}
+                              placeholder={`+ Add synonym for "${primary}" (e.g. powerhouse of the cell)...`}
+                              className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => addSynonymToGroup(gIdx)}
+                              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition"
+                            >
+                              + Add Synonym
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4 border border-dashed border-slate-800 rounded-xl text-center text-xs text-slate-500">
+                    No keywords/concepts added yet. Enter a primary keyword above to create Concept #1.
                   </div>
                 )}
               </div>

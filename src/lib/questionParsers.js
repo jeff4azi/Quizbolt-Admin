@@ -63,7 +63,19 @@ export const sanitizeQuestion = (raw, defaults = {}) => {
       keywords = keywords.split(",").map((s) => s.trim()).filter(Boolean);
     }
   }
-  if (!Array.isArray(keywords)) {
+  if (Array.isArray(keywords)) {
+    keywords = keywords
+      .map((item) => {
+        if (Array.isArray(item)) {
+          const sub = item.map((s) => String(s || "").trim()).filter(Boolean);
+          return sub.length > 0 ? sub : null;
+        }
+        const str = String(item || "").trim();
+        return str || null;
+      })
+      .filter(Boolean);
+    if (keywords.length === 0) keywords = null;
+  } else {
     keywords = null;
   }
 
