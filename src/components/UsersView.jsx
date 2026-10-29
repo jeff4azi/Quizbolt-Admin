@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Search,
   Users,
@@ -22,6 +22,19 @@ import {
   Gift,
   RotateCcw,
   Plus,
+  Eye,
+  Clock,
+  Flame,
+  Copy,
+  Calendar,
+  Award,
+  Mail,
+  Compass,
+  FileText,
+  CheckCircle2,
+  Activity,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
@@ -31,8 +44,7 @@ import {
 } from "../hooks/useUniversitiesAndColleges";
 import ConfirmDialog from "./ConfirmDialog";
 
-// profiles.year is a NOT NULL smallint storing 1-4 (NOT literally
-// 100/200/300/400) — there is no 400+1 "500 Level", year 4 is the final year.
+// profiles.year is a NOT NULL smallint storing 1-4 (NOT literally 100/200/300/400)
 const LEVEL_OPTIONS = [
   { value: "1", label: "100 Level" },
   { value: "2", label: "200 Level" },
@@ -52,10 +64,10 @@ export default function UsersView() {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(100); // Users list — higher page size for large cohorts
+  const [limit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Real universities/colleges from Supabase (no more hardcoded lists)
+  // Universities/colleges from Supabase
   const { universities } = useUniversities();
 
   // Filters
@@ -66,31 +78,38 @@ export default function UsersView() {
   const [yearFilter, setYearFilter] = useState("");
   const { colleges: filterColleges } = useColleges(university);
 
-  // Clear All Favourites Modal State
+  // Top metric aggregates (calculated from current cohort)
+  const cohortMetrics = useMemo(() => {
+    const premiumCount = users.filter((u) => u.is_premium).length;
+    const streakCount = users.filter((u) => (u.streak || u.current_streak || 0) > 0).length;
+    const distinctUnis = new Set(users.map((u) => u.university).filter(Boolean)).size;
+    return {
+      premiumCount,
+      streakCount,
+      distinctUnis,
+    };
+  }, [users]);
+
+  // Bulk Action Modals State
   const [isClearFavsModalOpen, setIsClearFavsModalOpen] = useState(false);
   const [isClearingFavs, setIsClearingFavs] = useState(false);
-
-  // Increment Level Modal State
-  const [isIncrementLevelModalOpen, setIsIncrementLevelModalOpen] =
-    useState(false);
+  const [isIncrementLevelModalOpen, setIsIncrementLevelModalOpen] = useState(false);
   const [isIncrementingLevel, setIsIncrementingLevel] = useState(false);
-
-  // Undo Promotion State
-  const [undoStatus, setUndoStatus] = useState(null); // { canUndo, updatedCount, promotedAt }
+  const [undoStatus, setUndoStatus] = useState(null);
   const [isUndoModalOpen, setIsUndoModalOpen] = useState(false);
   const [isUndoingLevel, setIsUndoingLevel] = useState(false);
 
-  // --- Grant Temporary Premium (Feature B) ---
-  const [grantModalUser, setGrantModalUser] = useState(null);
-  // grantTargetInfo = { user, isFullSemester: boolean, isTempActive: boolean, expiresAt: Date|null }
-  const [grantTargetInfo, setGrantTargetInfo] = useState(null);
-  const [grantPreset, setGrantPreset] = useState("contribution"); // "contribution" | "other"
-  const [grantReasonText, setGrantReasonText] = useState("");
-  const [grantDays, setGrantDays] = useState(7);
-  const [grantLoading, setGrantLoading] = useState(false);
+  // Notifications
+  const [notification, setNotification] = useState(null);
 
-  // Edit Modal State
-  const [selectedUser, setSelectedUser] = useState(null);
+  // ─── Slide-Over Drawer State ───────────────────────────────────────────────
+  const [drawerUser, setDrawerUser] = useState(null);
+  const [drawerTab, setDrawerTab] = useState("overview"); // 'overview' | 'attempts' | 'edit' | 'rerun' | 'grant'
+  const [drawerDetails, setDrawerDetails] = useState(null);
+  const [loadingDrawerDetails, setLoadingDrawerDetails] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  // Edit Form (inside Drawer)
   const [editForm, setEditForm] = useState({
     full_name: "",
     user_name: "",
@@ -102,20 +121,25 @@ export default function UsersView() {
   });
   const { colleges: editColleges, loadingColleges: editCollegesLoading } =
     useColleges(editForm.university);
+  const [isSavingUser, setIsSavingUser] = useState(false);
 
-  // Edit modal tab: 'profile' | 'rerun'
-  const [editModalTab, setEditModalTab] = useState("profile");
-
-  // Rerun courses state
-  const [overrides, setOverrides] = useState([]); // current user overrides
-  const [overridesLoading, setOverridesLoading] = useState(false);
-  const [candidateCourses, setCandidateCourses] = useState([]); // all courses for user's university
+  // Rerun Courses Overrides
+  const [overrides, setOverrides] = useState([]);
+  const [candidateCourses, setCandidateCourses] = useState([]);
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [overrideSearch, setOverrideSearch] = useState("");
   const [overrideActionLoading, setOverrideActionLoading] = useState(false);
 
-  const [notification, setNotification] = useState(null);
+  // Grant Temporary Premium (inside Drawer)
+  const [grantPreset, setGrantPreset] = useState("contribution");
+  const [grantReasonText, setGrantReasonText] = useState("");
+  const [grantDays, setGrantDays] = useState(7);
+  const [grantLoading, setGrantLoading] = useState(false);
 
+  // Delete User Dialog
+  const [deleteUserDialog, setDeleteUserDialog] = useState(null);
+
+  // Fetch Users List
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -153,6 +177,7 @@ export default function UsersView() {
     fetchUsers();
   }, [page, university, premiumFilter, collegeFilter, yearFilter]);
 
+  // Fetch Undo Status
   const fetchUndoStatus = async () => {
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -160,9 +185,7 @@ export default function UsersView() {
 
       const res = await fetch(
         `${API_BASE_URL}/api/admin/users/increment-levels/undo-status`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.ok) {
@@ -174,8 +197,6 @@ export default function UsersView() {
     }
   };
 
-  // Check on mount whether a recent promotion can still be undone
-  // (e.g. admin navigated away and came back).
   useEffect(() => {
     fetchUndoStatus();
   }, []);
@@ -186,15 +207,18 @@ export default function UsersView() {
     fetchUsers();
   };
 
-  const openEditModal = (user) => {
-    setSelectedUser(user);
-    setEditModalTab("profile");
+  // ─── Open Slide-Over Drawer ────────────────────────────────────────────────
+  const handleOpenDrawer = async (user, initialTab = "overview") => {
+    setDrawerUser(user);
+    setDrawerTab(initialTab);
+    setLoadingDrawerDetails(true);
+    setDrawerDetails(null);
     setOverrideSearch("");
+
+    // Populate edit form
     setEditForm({
       full_name: user.full_name || "",
       user_name: user.user_name || "",
-      // profiles.university is stored uppercase ("TASUED") but universities.id
-      // is lowercase ("tasued") — normalise to lowercase so the select matches.
       university: user.university ? user.university.trim().toLowerCase() : "",
       college: user.college || "",
       department: user.department || "",
@@ -202,31 +226,39 @@ export default function UsersView() {
       is_premium: Boolean(user.is_premium),
     });
 
-    // Fetch overrides and candidate courses in parallel
-    fetchUserOverrides(user.id);
+    // Fetch candidate courses for overrides in parallel
     fetchCandidateCourses(user);
-  };
 
-  const fetchUserOverrides = async (userId) => {
-    setOverridesLoading(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
+
       const res = await fetch(
-        `${API_BASE_URL}/api/admin/users/${userId}/overrides`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+        `${API_BASE_URL}/api/admin/users/${user.id}/details`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
+
       if (res.ok) {
-        const data = await res.json();
-        setOverrides(data || []);
+        const details = await res.json();
+        setDrawerDetails(details);
+        setOverrides(details.overrides || []);
       }
     } catch (err) {
-      console.error("Failed to fetch overrides:", err);
+      console.error("Failed to load user full details:", err);
     } finally {
-      setOverridesLoading(false);
+      setLoadingDrawerDetails(false);
     }
+  };
+
+  const closeDrawer = () => {
+    setDrawerUser(null);
+    setDrawerDetails(null);
+  };
+
+  const handleCopyId = (id) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
   };
 
   const fetchCandidateCourses = async (user) => {
@@ -239,7 +271,6 @@ export default function UsersView() {
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
-      // Fetch all courses for this university (no level filter — we filter client-side)
       const params = new URLSearchParams({ university: uni, limit: "500" });
       const res = await fetch(`${API_BASE_URL}/api/admin/courses?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -255,14 +286,15 @@ export default function UsersView() {
     }
   };
 
+  // Add / Remove Rerun Course Overrides
   const handleAddOverride = async (courseCode) => {
-    if (!selectedUser) return;
+    if (!drawerUser) return;
     setOverrideActionLoading(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
       const res = await fetch(
-        `${API_BASE_URL}/api/admin/users/${selectedUser.id}/overrides`,
+        `${API_BASE_URL}/api/admin/users/${drawerUser.id}/overrides`,
         {
           method: "POST",
           headers: {
@@ -270,11 +302,16 @@ export default function UsersView() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ course_code: courseCode }),
-        },
+        }
       );
-      if (!res.ok) throw new Error("Failed to add override");
+      if (!res.ok) throw new Error("Failed to add rerun override");
       const data = await res.json();
       setOverrides((prev) => [...prev, data]);
+      setNotification({
+        type: "success",
+        text: `Course ${courseCode} added to rerun overrides.`,
+      });
+      setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setNotification({ type: "error", text: err.message });
       setTimeout(() => setNotification(null), 4000);
@@ -283,18 +320,23 @@ export default function UsersView() {
     }
   };
 
-  const handleRemoveOverride = async (overrideId) => {
-    if (!selectedUser) return;
+  const handleRemoveOverride = async (overrideId, courseCode) => {
+    if (!drawerUser) return;
     setOverrideActionLoading(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
       const res = await fetch(
-        `${API_BASE_URL}/api/admin/users/${selectedUser.id}/overrides/${overrideId}`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+        `${API_BASE_URL}/api/admin/users/${drawerUser.id}/overrides/${overrideId}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) throw new Error("Failed to remove override");
       setOverrides((prev) => prev.filter((o) => o.id !== overrideId));
+      setNotification({
+        type: "success",
+        text: `Removed course override ${courseCode || ""}.`,
+      });
+      setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setNotification({ type: "error", text: err.message });
       setTimeout(() => setNotification(null), 4000);
@@ -303,14 +345,17 @@ export default function UsersView() {
     }
   };
 
+  // Save User Profile Changes
   const handleSaveUser = async (e) => {
     e.preventDefault();
+    if (!drawerUser) return;
+    setIsSavingUser(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
       const res = await fetch(
-        `${API_BASE_URL}/api/admin/users/${selectedUser.id}`,
+        `${API_BASE_URL}/api/admin/users/${drawerUser.id}`,
         {
           method: "PUT",
           headers: {
@@ -318,29 +363,145 @@ export default function UsersView() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(editForm),
-        },
+        }
       );
 
       if (!res.ok) throw new Error("Failed to update user profile");
 
-      setSelectedUser(null);
+      const updated = await res.json();
+
+      // Update local state in drawer and list
+      setDrawerUser((prev) => ({ ...prev, ...updated }));
+      if (drawerDetails) {
+        setDrawerDetails((prev) => ({
+          ...prev,
+          profile: { ...prev.profile, ...updated },
+        }));
+      }
+      setUsers((prev) =>
+        prev.map((u) => (u.id === drawerUser.id ? { ...u, ...updated } : u))
+      );
+
       setNotification({
         type: "success",
-        text: "User profile updated successfully!",
+        text: "Student profile updated successfully!",
       });
       setTimeout(() => setNotification(null), 4000);
-      fetchUsers();
     } catch (err) {
       setNotification({
         type: "error",
-        text: `Error updating user: ${err.message}`,
+        text: `Error updating profile: ${err.message}`,
       });
       setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setIsSavingUser(false);
     }
   };
 
-  const [deleteUserDialog, setDeleteUserDialog] = useState(null);
+  // Grant Temporary Premium
+  const handleGrantPremium = async (e) => {
+    e.preventDefault();
+    if (!drawerUser) return;
+    setGrantLoading(true);
 
+    const isPreset = grantPreset === "contribution";
+    const reasonText = isPreset
+      ? "Content Contribution / Verified Volunteer"
+      : grantReasonText.trim();
+    const days = parseInt(grantDays, 10);
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/premium/grant-free-days`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: drawerUser.id,
+            days,
+            reason: reasonText,
+          }),
+        }
+      );
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || "Failed to grant premium");
+
+      // Update states
+      setDrawerUser((prev) => ({ ...prev, is_premium: true }));
+      if (drawerDetails) {
+        setDrawerDetails((prev) => ({
+          ...prev,
+          profile: { ...prev.profile, is_premium: true },
+        }));
+      }
+      setUsers((prev) =>
+        prev.map((u) => (u.id === drawerUser.id ? { ...u, is_premium: true } : u))
+      );
+
+      setNotification({
+        type: "success",
+        text: `Successfully granted ${days} premium days to ${drawerUser.full_name || drawerUser.user_name}!`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch (err) {
+      setNotification({
+        type: "error",
+        text: `Error granting premium: ${err.message}`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setGrantLoading(false);
+    }
+  };
+
+  // Clear Single User's Favourites
+  const handleClearSingleUserFavourites = async () => {
+    if (!drawerUser) return;
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/${drawerUser.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ favourite_courses: [] }),
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed to clear favourites");
+
+      if (drawerDetails) {
+        setDrawerDetails((prev) => ({
+          ...prev,
+          profile: { ...prev.profile, favourite_courses: [] },
+          stats: { ...prev.stats, favourite_courses_count: 0 },
+        }));
+      }
+
+      setNotification({
+        type: "success",
+        text: "User's favourite courses reset to empty.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+    } catch (err) {
+      setNotification({ type: "error", text: err.message });
+      setTimeout(() => setNotification(null), 4000);
+    }
+  };
+
+  // Delete User Account
   const handleDeleteUser = (id, name) => {
     setDeleteUserDialog({ id, name });
   };
@@ -361,6 +522,8 @@ export default function UsersView() {
 
       if (!res.ok) throw new Error("Failed to delete user");
 
+      if (drawerUser?.id === id) closeDrawer();
+
       setNotification({
         type: "success",
         text: `User ${name || id} deleted successfully.`,
@@ -376,6 +539,7 @@ export default function UsersView() {
     }
   };
 
+  // Bulk Actions
   const handleConfirmClearAllFavourites = async () => {
     setIsClearingFavs(true);
     try {
@@ -387,7 +551,7 @@ export default function UsersView() {
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        },
+        }
       );
 
       const data = await res.json();
@@ -423,7 +587,7 @@ export default function UsersView() {
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        },
+        }
       );
 
       const data = await res.json();
@@ -462,7 +626,7 @@ export default function UsersView() {
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        },
+        }
       );
 
       const data = await res.json();
@@ -490,387 +654,457 @@ export default function UsersView() {
     }
   };
 
-  // ---------------------------------------------------------------------
-  // Feature B: Grant Free Days UI
-  // ---------------------------------------------------------------------
-  const openGrantModal = async (u) => {
-    setGrantModalUser(u);
-    setGrantPreset("contribution");
-    setGrantReasonText("");
-    setGrantDays(7);
-    setGrantLoading(false);
-    setGrantTargetInfo(null);
-
-    try {
-      const { data: accessRow, error } = await supabase
-        .from("premium_access")
-        .select("expires_at, active")
-        .eq("user_id", u.id)
-        .maybeSingle();
-      if (error) throw error;
-
-      const now = new Date();
-      const isTempActive =
-        !!accessRow && accessRow.active && new Date(accessRow.expires_at) > now;
-
-      // Full-semester detection rule: is_premium=true AND NO premium_access row
-      // (redeem_premium_code explicitly DELETES premium_access for full-semester codes)
-      const isFullSemester = Boolean(u.is_premium) && !accessRow;
-
-      setGrantTargetInfo({
-        user: u,
-        isFullSemester,
-        isTempActive,
-        hasAccessRow: !!accessRow,
-        expiresAt: accessRow?.expires_at
-          ? new Date(accessRow.expires_at)
-          : null,
-      });
-    } catch {
-      // Fallback to optimistic data so the modal still opens
-      setGrantTargetInfo({
-        user: u,
-        isFullSemester: false,
-        isTempActive: false,
-        hasAccessRow: false,
-        expiresAt: null,
-      });
-    }
-  };
-
-  const closeGrantModal = () => {
-    setGrantModalUser(null);
-    setGrantTargetInfo(null);
-  };
-
-  const handleConfirmGrantDays = async () => {
-    if (!grantModalUser || !grantTargetInfo) return;
-    if (grantTargetInfo.isFullSemester) return;
-
-    const reason =
-      grantPreset === "contribution"
-        ? "Material Contribution"
-        : grantReasonText.trim();
-
-    if (!reason) {
-      setNotification({
-        type: "error",
-        text: "Please provide a reason for the grant.",
-      });
-      setTimeout(() => setNotification(null), 4000);
-      return;
-    }
-
-    setGrantLoading(true);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
-
-      const res = await fetch(
-        `${API_BASE_URL}/api/admin/premium-grants/grant-days`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            user_id: grantModalUser.id,
-            reason,
-            days: grantDays,
-          }),
-        },
-      );
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to grant premium days");
-      }
-
-      closeGrantModal();
-      setNotification({
-        type: "success",
-        text:
-          data.message ||
-          `Granted ${data.days_added ?? grantDays} premium days to ${grantModalUser.full_name || grantModalUser.user_name}!`,
-      });
-      setTimeout(() => setNotification(null), 5000);
-      fetchUsers();
-    } catch (err) {
-      setNotification({
-        type: "error",
-        text: `Error granting premium days: ${err.message}`,
-      });
-      setTimeout(() => setNotification(null), 5000);
-    } finally {
-      setGrantLoading(false);
-    }
+  // Format Duration seconds
+  const formatDuration = (secs) => {
+    if (!secs || isNaN(secs)) return "0m";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
   };
 
   return (
-    <div className="p-6 space-y-6 text-slate-100">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+    <div className="p-4 sm:p-6 space-y-6 text-slate-100 max-w-7xl mx-auto">
+      {/* ─── Top Header & Platform Actions ──────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
             <Users className="w-6 h-6 text-indigo-400" />
-            User Management & Overrides
-          </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            Search student profiles, grant/revoke premium access, edit academic
-            details, and manage course access.
-          </p>
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+              Student Directory & Intelligence
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                {total.toLocaleString()} Scholars
+              </span>
+            </h1>
+            <p className="text-slate-400 text-xs mt-0.5">
+              Comprehensive student profiles, academic progress, exam telemetry, course overrides, and subscription controls.
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => setIsIncrementLevelModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold rounded-xl transition shadow-sm"
-          >
-            <TrendingUp className="w-4 h-4 text-indigo-400" />
-            Promote All Levels (+1)
-          </button>
-
+        {/* Global Bulk Actions */}
+        <div className="flex flex-wrap items-center gap-2">
           {undoStatus?.canUndo && (
             <button
               onClick={() => setIsUndoModalOpen(true)}
-              title={`Promoted ${undoStatus.updatedCount} users on ${new Date(undoStatus.promotedAt).toLocaleString()}`}
-              className="flex items-center gap-2 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition shadow-sm"
+              title="Revert the most recent level increment"
             >
-              <Undo2 className="w-4 h-4 text-amber-400" />
-              Undo Last Promotion
+              <Undo2 className="w-3.5 h-3.5" />
+              <span>Undo Promotion</span>
             </button>
           )}
 
           <button
-            onClick={() => setIsClearFavsModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition shadow-sm"
+            onClick={() => setIsIncrementLevelModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/20"
           >
-            <HeartOff className="w-4 h-4 text-red-400" />
-            Clear All Users' Favourite Courses
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Promote All Levels (+1)</span>
+          </button>
+
+          <button
+            onClick={() => setIsClearFavsModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-bold transition"
+            title="Reset favourite courses for all students"
+          >
+            <HeartOff className="w-3.5 h-3.5" />
+            <span>Clear All Favourites</span>
           </button>
         </div>
       </div>
 
+      {/* ─── Notification Banner ────────────────────────────────────────── */}
       {notification && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center justify-between">
-          <span>{notification.text}</span>
-          <button onClick={() => setNotification(null)}>
-            <X className="w-4 h-4" />
+        <div
+          className={`p-3.5 border rounded-2xl text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200 ${
+            notification.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+              : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {notification.type === "success" ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span>{notification.text}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Search & Filter Bar */}
-      <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg space-y-3">
-        <form onSubmit={handleSearchSubmit} className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search by full name, username, or email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+      {/* ─── Top Executive KPI Cards (4 Cards) ───────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Total Accounts</span>
+            <Users className="w-4 h-4 text-indigo-400" />
           </div>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition"
-          >
-            Search
-          </button>
+          <div className="mt-2.5">
+            <div className="text-2xl font-black text-white font-mono">
+              {total.toLocaleString()}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Platform registered scholars</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Active Premium</span>
+            <Crown className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="mt-2.5">
+            <div className="text-2xl font-black text-amber-400 font-mono">
+              {cohortMetrics.premiumCount}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Pro subscribers in view</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Active Streakers</span>
+            <Flame className="w-4 h-4 text-orange-400" />
+          </div>
+          <div className="mt-2.5">
+            <div className="text-2xl font-black text-orange-400 font-mono">
+              {cohortMetrics.streakCount}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Scholars with streak &gt; 0</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Campuses</span>
+            <GraduationCap className="w-4 h-4 text-cyan-400" />
+          </div>
+          <div className="mt-2.5">
+            <div className="text-2xl font-black text-cyan-400 font-mono">
+              {universities.length}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Institutions supported</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Search & Filter Toolbar ────────────────────────────────────── */}
+      <div className="bg-slate-900/70 border border-slate-800 p-3.5 rounded-2xl shadow-lg flex flex-wrap items-center justify-between gap-3">
+        {/* Search input */}
+        <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[240px]">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search student name, username, email, or UUID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setPage(1);
+                fetchUsers();
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </form>
 
-        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80 text-xs">
-          <span className="text-slate-500 font-semibold flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" /> Filter:
-          </span>
+        {/* Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* University */}
+          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+            <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={university}
+              onChange={(e) => {
+                setUniversity(e.target.value);
+                setCollegeFilter("");
+                setPage(1);
+              }}
+              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer max-w-[130px] truncate"
+            >
+              <option value="" className="bg-slate-900 text-white">All Campuses</option>
+              {universities.map((u) => (
+                <option key={u.id} value={u.id} className="bg-slate-900 text-white">
+                  {u.name || u.id}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            value={university}
-            onChange={(e) => {
-              setUniversity(e.target.value);
-              setCollegeFilter("");
-              setPage(1);
-            }}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="">All Universities</option>
-            {universities.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name || u.id}
+          {/* College (Cascading) */}
+          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+            <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={collegeFilter}
+              onChange={(e) => {
+                setCollegeFilter(e.target.value);
+                setPage(1);
+              }}
+              disabled={!university}
+              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer max-w-[130px] truncate disabled:opacity-50"
+            >
+              <option value="" className="bg-slate-900 text-white">
+                {university ? "All Colleges" : "Select Campus First"}
               </option>
-            ))}
-          </select>
+              {filterColleges.map((c) => (
+                <option key={c.id} value={c.id} className="bg-slate-900 text-white">
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            value={collegeFilter}
-            onChange={(e) => {
-              setCollegeFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            disabled={!university}
-          >
-            <option value="">
-              {university ? "All Colleges" : "Select University First"}
-            </option>
-            {filterColleges.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          {/* Academic Level */}
+          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+            <select
+              value={yearFilter}
+              onChange={(e) => {
+                setYearFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="" className="bg-slate-900 text-white">All Levels</option>
+              {LEVEL_OPTIONS.map((l) => (
+                <option key={l.value} value={l.value} className="bg-slate-900 text-white">
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            value={yearFilter}
-            onChange={(e) => {
-              setYearFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="">All Levels</option>
-            {LEVEL_OPTIONS.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
-              </option>
-            ))}
-          </select>
+          {/* Premium Status */}
+          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+            <Crown className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={premiumFilter}
+              onChange={(e) => {
+                setPremiumFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="" className="bg-slate-900 text-white">All Tiers</option>
+              <option value="true" className="bg-slate-900 text-white">👑 Premium Only</option>
+              <option value="false" className="bg-slate-900 text-white">Free Tier Only</option>
+            </select>
+          </div>
 
-          <select
-            value={premiumFilter}
-            onChange={(e) => {
-              setPremiumFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="">All Users</option>
-            <option value="true">Premium Users Only</option>
-            <option value="false">Free Users Only</option>
-          </select>
-
-          {(university || collegeFilter || yearFilter || premiumFilter) && (
+          {/* Clear Filters Reset */}
+          {(university || collegeFilter || yearFilter || premiumFilter || search) && (
             <button
               onClick={() => {
                 setUniversity("");
                 setCollegeFilter("");
                 setYearFilter("");
                 setPremiumFilter("");
+                setSearch("");
                 setPage(1);
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[10px] font-bold transition"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-bold transition"
             >
-              <X className="w-3 h-3" /> Clear Filters
+              <X className="w-3.5 h-3.5" />
+              <span>Clear</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Users Table */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
+      {/* ─── Main Students Table ────────────────────────────────────────── */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-slate-400">
-            Loading student profiles...
+          <div className="py-24 text-center text-slate-400 space-y-3">
+            <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-xs">Loading student profiles and academic records...</p>
           </div>
         ) : users.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 text-xs">
-            No user accounts found matching query.
+          <div className="py-20 text-center text-slate-500 text-xs space-y-2">
+            <p>No student accounts found matching query criteria.</p>
+            <p className="text-[11px] text-slate-600">
+              Try adjusting your campus, college, level, or search keyword.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase font-semibold">
-                  <th className="py-3 px-4">User</th>
-                  <th className="py-3 px-4">University</th>
-                  <th className="py-3 px-4">College / Dept</th>
-                  <th className="py-3 px-4">Level</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Streak</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400 uppercase font-semibold text-[11px]">
+                  <th className="py-3.5 px-4">Student Profile</th>
+                  <th className="py-3.5 px-4">Campus</th>
+                  <th className="py-3.5 px-4">College & Dept</th>
+                  <th className="py-3.5 px-4">Level</th>
+                  <th className="py-3.5 px-4">Tier</th>
+                  <th className="py-3.5 px-4">Streak</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-800/40 transition">
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-white">
-                        {u.full_name || u.user_name || "Unnamed User"}
-                      </div>
-                      <div className="text-[11px] text-slate-400">
-                        {u.email || u.user_name || u.id}
-                      </div>
-                    </td>
+                {users.map((u) => {
+                  const hasStreak = (u.streak || u.current_streak || 0) > 0;
 
-                    <td className="py-3.5 px-4 font-semibold text-indigo-300">
-                      {u.university || "—"}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-300">
-                      {u.college || "-"} / {u.department || "-"}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-300">
-                      {formatLevel(u.year)}
-                    </td>
+                  return (
+                    <tr
+                      key={u.id}
+                      onClick={() => handleOpenDrawer(u, "overview")}
+                      className="hover:bg-slate-800/50 transition cursor-pointer group"
+                    >
+                      {/* Student Info */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          {u.avatar_url ? (
+                            <img
+                              src={u.avatar_url}
+                              alt={u.full_name || u.user_name}
+                              className="w-9 h-9 rounded-full object-cover border border-slate-700 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-indigo-950 border border-indigo-800/80 flex items-center justify-center text-indigo-300 font-bold text-xs shrink-0 group-hover:border-indigo-500 transition">
+                              {u.full_name?.charAt(0)?.toUpperCase() ||
+                                u.user_name?.charAt(0)?.toUpperCase() ||
+                                "S"}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-white text-xs truncate max-w-[160px] sm:max-w-[200px] group-hover:text-indigo-300 transition">
+                                {u.full_name || "Unnamed Scholar"}
+                              </span>
+                              {u.is_premium && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  PRO
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                              <span>@{u.user_name || "user"}</span>
+                              {u.email && (
+                                <>
+                                  <span>•</span>
+                                  <span className="truncate max-w-[140px] text-slate-500">
+                                    {u.email}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
 
-                    <td className="py-3.5 px-4">
-                      {u.is_premium ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                          <Crown className="w-3 h-3" /> Premium
+                      {/* Campus */}
+                      <td className="py-3.5 px-4">
+                        <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs uppercase tracking-wide">
+                          {u.university || "—"}
                         </span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                          Free Tier
+                      </td>
+
+                      {/* College & Department */}
+                      <td className="py-3.5 px-4 text-slate-300">
+                        <div className="font-semibold text-slate-200 truncate max-w-[170px]">
+                          {u.department || "General"}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate max-w-[170px] mt-0.5">
+                          {u.college || "Unassigned College"}
+                        </div>
+                      </td>
+
+                      {/* Level */}
+                      <td className="py-3.5 px-4">
+                        <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-mono font-semibold text-[11px]">
+                          {formatLevel(u.year)}
                         </span>
-                      )}
-                    </td>
+                      </td>
 
-                    <td className="py-3.5 px-4 font-bold text-amber-400">
-                      🔥 {u.streak || 0}
-                    </td>
+                      {/* Tier */}
+                      <td className="py-3.5 px-4">
+                        {u.is_premium ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm">
+                            <Crown className="w-3 h-3 text-amber-400" /> Premium
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-800/80 text-slate-400 border border-slate-700/80">
+                            Free Tier
+                          </span>
+                        )}
+                      </td>
 
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(u)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition"
-                          title="Edit Profile"
+                      {/* Streak */}
+                      <td className="py-3.5 px-4">
+                        {hasStreak ? (
+                          <span className="inline-flex items-center gap-1 font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">
+                            <Flame className="w-3.5 h-3.5 text-amber-400" />
+                            {u.streak || u.current_streak}d
+                          </span>
+                        ) : (
+                          <span className="text-slate-600 font-mono text-xs">0d</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div
+                          className="flex items-center justify-end gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openGrantModal(u)}
-                          className={`p-1.5 rounded-lg transition ${
-                            u.is_premium
-                              ? "text-slate-400 hover:text-amber-400 hover:bg-slate-800"
-                              : "text-slate-400 hover:text-emerald-400 hover:bg-slate-800"
-                          }`}
-                          title="Grant Free Premium Days"
-                        >
-                          <Gift className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            handleDeleteUser(u.id, u.full_name || u.user_name)
-                          }
-                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
-                          title="Delete User"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <button
+                            onClick={() => handleOpenDrawer(u, "overview")}
+                            className="p-1.5 text-slate-400 hover:text-indigo-300 hover:bg-slate-800 rounded-lg transition"
+                            title="Inspect Student Profile"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenDrawer(u, "edit")}
+                            className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition"
+                            title="Quick Edit Profile"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenDrawer(u, "grant")}
+                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-lg transition"
+                            title="Grant Free Premium Days"
+                          >
+                            <Gift className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleDeleteUser(u.id, u.full_name || u.user_name)
+                            }
+                            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
+                            title="Delete Student Account"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
 
         {/* Pagination Bar */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div className="p-4 bg-slate-950/80 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
           <div>
             Showing{" "}
             <span className="font-bold text-white">
@@ -884,14 +1118,14 @@ export default function UsersView() {
             <span className="font-bold text-white">
               {total.toLocaleString()}
             </span>{" "}
-            accounts
+            student accounts
           </div>
 
           <div className="flex items-center gap-2">
             <button
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
-              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
+              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-40 transition flex items-center gap-1"
             >
               <ChevronLeft className="w-4 h-4" /> Prev
             </button>
@@ -901,7 +1135,7 @@ export default function UsersView() {
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
-              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition flex items-center gap-1"
+              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-40 transition flex items-center gap-1"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
@@ -909,458 +1143,882 @@ export default function UsersView() {
         </div>
       </div>
 
-      {/* Edit User Profile Modal */}
-      {selectedUser && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
-              <div>
-                <h2 className="text-base font-bold text-white">
-                  Edit User Profile
-                </h2>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {selectedUser.full_name || selectedUser.user_name}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedUser(null)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-1 shrink-0 bg-slate-800/50 p-1 rounded-xl">
-              <button
-                onClick={() => setEditModalTab("profile")}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                  editModalTab === "profile"
-                    ? "bg-indigo-600 text-white shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                Profile
-              </button>
-              <button
-                onClick={() => setEditModalTab("rerun")}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                  editModalTab === "rerun"
-                    ? "bg-indigo-600 text-white shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <RotateCcw className="w-3 h-3" />
-                Rerun Courses
-                {overrides.length > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-indigo-500/30 text-indigo-200">
-                    {overrides.length}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* Tab Content — scrollable */}
-            <div className="overflow-y-auto flex-1 min-h-0">
-              {/* ── Profile Tab ── */}
-              {editModalTab === "profile" && (
-                <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">
-                        Full Name
-                      </label>
-                      <input
-                        type="text"
-                        value={editForm.full_name}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            full_name: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">
-                        Username
-                      </label>
-                      <input
-                        type="text"
-                        value={editForm.user_name}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            user_name: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">
-                        University
-                      </label>
-                      <select
-                        value={editForm.university}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            university: e.target.value,
-                            college: "",
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      >
-                        <option value="">Select University</option>
-                        {universities.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name || u.id}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">
-                        Level
-                      </label>
-                      <select
-                        value={editForm.year}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, year: e.target.value })
-                        }
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      >
-                        {LEVEL_OPTIONS.map((l) => (
-                          <option key={l.value} value={l.value}>
-                            {l.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">
-                        College
-                      </label>
-                      <select
-                        value={editForm.college}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, college: e.target.value })
-                        }
-                        disabled={!editForm.university || editCollegesLoading}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
-                      >
-                        <option value="">
-                          {!editForm.university
-                            ? "Select University First"
-                            : editCollegesLoading
-                              ? "Loading colleges..."
-                              : "Select College"}
-                        </option>
-                        {editColleges.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 mb-1 font-semibold">
-                        Department
-                      </label>
-                      <input
-                        type="text"
-                        value={editForm.department}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            department: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Premium toggle */}
-                  <label className="flex items-center gap-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl cursor-pointer hover:bg-amber-500/10 transition">
-                    <input
-                      type="checkbox"
-                      checked={editForm.is_premium}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          is_premium: e.target.checked,
-                        })
-                      }
-                      className="rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500"
+      {/* ─── SLIDE-OVER STUDENT AUDIT & MANAGEMENT DRAWER ─────────────────── */}
+      {drawerUser && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex justify-end animate-in fade-in duration-200">
+          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-2xl h-full flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-300">
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-slate-800 bg-slate-950/60 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3.5">
+                  {drawerUser.avatar_url ? (
+                    <img
+                      src={drawerUser.avatar_url}
+                      alt={drawerUser.full_name || drawerUser.user_name}
+                      className="w-12 h-12 rounded-2xl object-cover border-2 border-indigo-500/40 shrink-0"
                     />
-                    <div>
-                      <div className="text-amber-400 font-bold flex items-center gap-1.5">
-                        <Crown className="w-3.5 h-3.5" /> Grant Premium Access
-                      </div>
-                      <div className="text-slate-500 text-[10px] mt-0.5">
-                        Manually override user premium status
-                      </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-300 font-bold text-lg shrink-0">
+                      {drawerUser.full_name?.charAt(0)?.toUpperCase() ||
+                        drawerUser.user_name?.charAt(0)?.toUpperCase() ||
+                        "S"}
                     </div>
-                  </label>
+                  )}
 
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedUser(null)}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition"
-                    >
-                      Save Profile Changes
-                    </button>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-black text-white">
+                        {drawerUser.full_name || "Unnamed Scholar"}
+                      </h2>
+                      {drawerUser.is_premium ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          <Crown className="w-3 h-3 text-amber-400" /> PRO
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                          Free
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
+                      <span>@{drawerUser.user_name || "user"}</span>
+                      <span>•</span>
+                      <span className="text-indigo-400 font-bold uppercase">
+                        {drawerUser.university || "No Campus"}
+                      </span>
+                      <span>•</span>
+                      <span>{formatLevel(drawerUser.year)}</span>
+                    </div>
+
+                    {/* Copyable UUID */}
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleCopyId(drawerUser.id)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 hover:border-slate-700 text-[10px] font-mono text-slate-400 hover:text-slate-200 transition"
+                      >
+                        <Copy className="w-3 h-3 text-slate-500" />
+                        <span>{drawerUser.id}</span>
+                        {copiedId && (
+                          <span className="text-emerald-400 text-[9px] font-bold ml-1">
+                            COPIED!
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </form>
-              )}
+                </div>
 
-              {/* ── Rerun Courses Tab ── */}
-              {editModalTab === "rerun" &&
-                (() => {
-                  const userYear = parseInt(
-                    editForm.year || selectedUser.year || "1",
-                    10,
-                  );
-                  const userCollege = (
-                    editForm.college ||
-                    selectedUser.college ||
-                    ""
-                  ).toUpperCase();
-                  const userUni = (selectedUser.university || "")
-                    .trim()
-                    .toUpperCase();
+                <button
+                  onClick={closeDrawer}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-                  // Filter: same university, level strictly lower than user's current level,
-                  // and college matches user's college or is "ALL"
-                  const eligible = candidateCourses.filter((c) => {
-                    const courseLevel = Math.floor(Number(c.level) / 100); // e.g. 100→1, 200→2
-                    if (courseLevel >= userYear) return false;
-                    const colleges = (c.colleges || []).map((x) =>
-                      x.toUpperCase(),
-                    );
-                    if (
-                      !colleges.includes("ALL") &&
-                      !colleges.includes(userCollege)
-                    )
-                      return false;
-                    return true;
-                  });
+              {/* Navigation Tabs */}
+              <div className="flex items-center gap-1 mt-5 bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs overflow-x-auto">
+                <button
+                  onClick={() => setDrawerTab("overview")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === "overview"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Overview</span>
+                </button>
 
-                  const alreadyAdded = new Set(
-                    overrides.map((o) => o.course_code.toUpperCase()),
-                  );
+                <button
+                  onClick={() => setDrawerTab("attempts")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === "attempts"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>Exams</span>
+                  {drawerDetails?.stats?.total_attempts > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black bg-indigo-500/30 text-indigo-200">
+                      {drawerDetails.stats.total_attempts}
+                    </span>
+                  )}
+                </button>
 
-                  const filtered = eligible.filter((c) => {
-                    if (!overrideSearch.trim()) return true;
-                    const q = overrideSearch.toLowerCase();
-                    return (
-                      c.course_code.toLowerCase().includes(q) ||
-                      (c.title || "").toLowerCase().includes(q)
-                    );
-                  });
+                <button
+                  onClick={() => setDrawerTab("edit")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === "edit"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Profile</span>
+                </button>
 
-                  return (
-                    <div className="space-y-4 text-xs">
-                      {/* Info banner */}
-                      <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-300 text-[11px]">
-                        Rerun courses let a student access lower-level courses
-                        they may have missed. Showing <strong>{userUni}</strong>{" "}
-                        courses below <strong>{LEVEL_LABELS[userYear]}</strong>{" "}
-                        that match their college.
+                <button
+                  onClick={() => setDrawerTab("rerun")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === "rerun"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Rerun</span>
+                  {overrides.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black bg-cyan-500/30 text-cyan-200">
+                      {overrides.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setDrawerTab("grant")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === "grant"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Gift className="w-3.5 h-3.5" />
+                  <span>Grant Pro</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {loadingDrawerDetails ? (
+                <div className="py-24 text-center text-slate-400 space-y-3">
+                  <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs">Loading comprehensive academic history...</p>
+                </div>
+              ) : (
+                <>
+                  {/* ─── TAB 1: OVERVIEW ─────────────────────────────────── */}
+                  {drawerTab === "overview" && (
+                    <div className="space-y-5 animate-in fade-in duration-150">
+                      {/* 4 Performance Metric Cards */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Total Exams
+                          </span>
+                          <div className="text-xl font-black text-white font-mono mt-1">
+                            {drawerDetails?.stats?.total_attempts || 0}
+                          </div>
+                          <span className="text-[10px] text-slate-500">Attempted</span>
+                        </div>
+
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Best Score
+                          </span>
+                          <div className="text-xl font-black text-emerald-400 font-mono mt-1">
+                            {drawerDetails?.stats?.best_score_percent ? `${drawerDetails.stats.best_score_percent}%` : "0%"}
+                          </div>
+                          <span className="text-[10px] text-slate-500">Peak test score</span>
+                        </div>
+
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Avg Score
+                          </span>
+                          <div className="text-xl font-black text-amber-400 font-mono mt-1">
+                            {drawerDetails?.stats?.average_percent ? `${drawerDetails.stats.average_percent}%` : "0%"}
+                          </div>
+                          <span className="text-[10px] text-slate-500">Cohort average</span>
+                        </div>
+
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Study Time
+                          </span>
+                          <div className="text-xl font-black text-cyan-400 font-mono mt-1">
+                            {formatDuration(drawerDetails?.stats?.total_duration_seconds)}
+                          </div>
+                          <span className="text-[10px] text-slate-500">Time spent</span>
+                        </div>
                       </div>
 
-                      {/* Current overrides */}
-                      <div>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-2">
-                          Current Rerun Courses ({overrides.length})
-                        </p>
-                        {overridesLoading ? (
-                          <div className="text-slate-500 text-[11px]">
-                            Loading...
+                      {/* Academic & Campus Details */}
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <GraduationCap className="w-4 h-4 text-indigo-400" />
+                          Academic Profile
+                        </h4>
+
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="text-slate-500 text-[11px]">Campus:</span>
+                            <div className="font-bold text-slate-200 mt-0.5">
+                              {drawerDetails?.profile?.university || drawerUser.university || "—"}
+                            </div>
                           </div>
-                        ) : overrides.length === 0 ? (
-                          <div className="text-slate-600 text-[11px] italic">
-                            No rerun courses assigned yet.
+                          <div>
+                            <span className="text-slate-500 text-[11px]">College:</span>
+                            <div className="font-bold text-slate-200 mt-0.5">
+                              {drawerDetails?.profile?.college || drawerUser.college || "—"}
+                            </div>
                           </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            {overrides.map((o) => (
-                              <span
-                                key={o.id}
-                                className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-950/60 border border-indigo-700/50 text-indigo-300 rounded-lg font-mono font-bold text-[11px]"
+                          <div>
+                            <span className="text-slate-500 text-[11px]">Department:</span>
+                            <div className="font-bold text-slate-200 mt-0.5">
+                              {drawerDetails?.profile?.department || drawerUser.department || "—"}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[11px]">Academic Level:</span>
+                            <div className="font-bold text-indigo-400 mt-0.5">
+                              {formatLevel(drawerDetails?.profile?.year || drawerUser.year)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Account & Contact Details */}
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <Mail className="w-4 h-4 text-indigo-400" />
+                          Account & Activity Information
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="text-slate-500 text-[11px]">Registered Email:</span>
+                            <div className="font-mono text-slate-200 mt-0.5 flex items-center gap-1">
+                              <span>{drawerDetails?.profile?.email || "No email on record"}</span>
+                              {drawerDetails?.profile?.email_confirmed_at && (
+                                <span className="text-emerald-400 text-[10px]" title="Email Verified">
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-slate-500 text-[11px]">Current Streak:</span>
+                            <div className="font-mono font-bold text-amber-400 mt-0.5 flex items-center gap-1">
+                              <Flame className="w-3.5 h-3.5" />
+                              <span>{drawerDetails?.profile?.current_streak || 0} days</span>
+                              <span className="text-slate-500 text-[10px]">
+                                (Best: {drawerDetails?.profile?.best_streak || 0}d)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-slate-500 text-[11px]">Registered On:</span>
+                            <div className="text-slate-300 mt-0.5">
+                              {drawerDetails?.profile?.created_at
+                                ? new Date(drawerDetails.profile.created_at).toLocaleDateString(undefined, {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                : "N/A"}
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-slate-500 text-[11px]">Last Study Activity:</span>
+                            <div className="text-slate-300 mt-0.5">
+                              {drawerDetails?.profile?.last_study_date
+                                ? new Date(drawerDetails.profile.last_study_date).toLocaleDateString()
+                                : "No activity"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Favourite Courses */}
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                            <BookOpen className="w-4 h-4 text-indigo-400" />
+                            Saved Favourite Courses
+                          </h4>
+                          {Array.isArray(drawerDetails?.profile?.favourite_courses) &&
+                            drawerDetails.profile.favourite_courses.length > 0 && (
+                              <button
+                                onClick={handleClearSingleUserFavourites}
+                                className="text-[10px] text-rose-400 hover:text-rose-300 font-bold transition flex items-center gap-1"
                               >
-                                {o.course_code}
-                                <button
-                                  onClick={() => handleRemoveOverride(o.id)}
-                                  disabled={overrideActionLoading}
-                                  className="text-indigo-400 hover:text-rose-400 transition disabled:opacity-40"
-                                  title="Remove override"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
+                                <HeartOff className="w-3 h-3" /> Clear Favourites
+                              </button>
+                            )}
+                        </div>
+
+                        {Array.isArray(drawerDetails?.profile?.favourite_courses) &&
+                        drawerDetails.profile.favourite_courses.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {drawerDetails.profile.favourite_courses.map((code) => (
+                              <span
+                                key={code}
+                                className="px-2.5 py-1 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 font-mono font-bold text-xs"
+                              >
+                                {code}
                               </span>
                             ))}
                           </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">
+                            Student has not bookmarked any favourite courses yet.
+                          </p>
                         )}
                       </div>
 
-                      {/* Search + picker */}
-                      <div>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-2">
-                          Add Course
-                        </p>
-                        <div className="relative mb-2">
-                          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
-                          <input
-                            type="text"
-                            placeholder="Search by code or title..."
-                            value={overrideSearch}
-                            onChange={(e) => setOverrideSearch(e.target.value)}
-                            className="w-full pl-8 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </div>
+                      {/* Quick Action Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 pt-2">
+                        <button
+                          onClick={() => setDrawerTab("edit")}
+                          className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit Profile Info</span>
+                        </button>
 
-                        {candidateLoading ? (
-                          <div className="py-6 text-center text-slate-500">
-                            <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-1" />
-                            Loading courses...
+                        <button
+                          onClick={() => setDrawerTab("grant")}
+                          className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                          <Gift className="w-3.5 h-3.5" />
+                          <span>Grant Free Premium</span>
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleDeleteUser(drawerUser.id, drawerUser.full_name || drawerUser.user_name)
+                          }
+                          className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-bold transition ml-auto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Account</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ─── TAB 2: EXAMS & ACTIVITY ─────────────────────────── */}
+                  {drawerTab === "attempts" && (
+                    <div className="space-y-4 animate-in fade-in duration-150">
+                      {/* Leaderboard Placements */}
+                      {drawerDetails?.rank_history && drawerDetails.rank_history.length > 0 && (
+                        <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2.5">
+                          <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                            <Award className="w-4 h-4 text-amber-400" />
+                            Official Leaderboard Snapshot Rankings
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {drawerDetails.rank_history.map((rh, idx) => (
+                              <div
+                                key={idx}
+                                className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono flex items-center gap-2"
+                              >
+                                <span className="font-bold text-amber-400">#{rh.rank}</span>
+                                <span className="text-slate-400 text-[10px]">
+                                  {new Date(rh.week_start).toLocaleDateString()}
+                                </span>
+                                <span className="text-slate-300 font-bold">
+                                  {rh.best_percent ? `${Math.round(rh.best_percent)}%` : ""}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ) : filtered.length === 0 ? (
-                          <div className="py-6 text-center text-slate-600 italic">
-                            {eligible.length === 0
-                              ? "No eligible courses found for this university / level combination."
-                              : "No courses match your search."}
+                        </div>
+                      )}
+
+                      {/* Attempts List */}
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                          Chronological Exam Attempts ({drawerDetails?.attempts?.length || 0})
+                        </h4>
+
+                        {!drawerDetails?.attempts || drawerDetails.attempts.length === 0 ? (
+                          <div className="py-12 text-center text-slate-500 text-xs bg-slate-950/40 border border-slate-800 rounded-2xl">
+                            No exam attempts recorded for this student yet.
                           </div>
                         ) : (
-                          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                            {filtered.map((c) => {
-                              const added = alreadyAdded.has(
-                                c.course_code.toUpperCase(),
-                              );
+                          <div className="space-y-2">
+                            {drawerDetails.attempts.map((att) => {
+                              const pct =
+                                att.total_questions > 0
+                                  ? Math.round((att.score / att.total_questions) * 100)
+                                  : 0;
+                              const pace =
+                                att.total_questions > 0
+                                  ? Math.round((att.time_taken / att.total_questions) * 10) / 10
+                                  : null;
+
                               return (
                                 <div
-                                  key={`${c.university}_${c.course_code}`}
-                                  className={`flex items-center justify-between px-3 py-2 rounded-xl border transition ${
-                                    added
-                                      ? "bg-indigo-950/30 border-indigo-700/40 opacity-60"
-                                      : "bg-slate-800/60 border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800"
-                                  }`}
+                                  key={att.id}
+                                  className="p-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-2xl flex items-center justify-between gap-3 text-xs transition"
                                 >
                                   <div>
-                                    <span className="font-mono font-bold text-indigo-400 text-[11px]">
-                                      {c.course_code}
-                                    </span>
-                                    <span className="text-slate-400 mx-1.5">
-                                      ·
-                                    </span>
-                                    <span className="text-slate-300 text-[11px]">
-                                      {c.title}
-                                    </span>
-                                    <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                                      {c.level}L ·{" "}
-                                      {(c.colleges || []).join(", ")}
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-white font-mono">
+                                        {att.course_id || "EXAM"}
+                                      </span>
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-slate-800 text-slate-300">
+                                        {att.type || "OBJ"}
+                                      </span>
+                                      {att.is_retake && (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400">
+                                          Retake
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
+                                      <span>
+                                        {att.date_taken
+                                          ? new Date(att.date_taken).toLocaleString(undefined, {
+                                              dateStyle: "short",
+                                              timeStyle: "short",
+                                            })
+                                          : ""}
+                                      </span>
+                                      {pace !== null && (
+                                        <>
+                                          <span>•</span>
+                                          <span className="font-mono text-cyan-400">{pace}s/q</span>
+                                        </>
+                                      )}
                                     </div>
                                   </div>
-                                  <button
-                                    onClick={() =>
-                                      !added && handleAddOverride(c.course_code)
-                                    }
-                                    disabled={added || overrideActionLoading}
-                                    className={`ml-3 p-1.5 rounded-lg transition shrink-0 ${
-                                      added
-                                        ? "text-indigo-500 cursor-default"
-                                        : "text-slate-400 hover:text-emerald-400 hover:bg-slate-700 disabled:opacity-40"
-                                    }`}
-                                    title={
-                                      added
-                                        ? "Already added"
-                                        : "Add rerun course"
-                                    }
-                                  >
-                                    {added ? (
-                                      <Check className="w-3.5 h-3.5" />
-                                    ) : (
-                                      <Plus className="w-3.5 h-3.5" />
-                                    )}
-                                  </button>
+
+                                  <div className="text-right">
+                                    <div className="flex items-center gap-1.5 justify-end">
+                                      <span
+                                        className={`font-black font-mono text-sm ${
+                                          pct >= 70
+                                            ? "text-emerald-400"
+                                            : pct >= 50
+                                            ? "text-amber-400"
+                                            : "text-rose-400"
+                                        }`}
+                                      >
+                                        {pct}%
+                                      </span>
+                                      <span className="text-[10px] text-slate-500 font-mono">
+                                        ({att.score}/{att.total_questions})
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                      {formatDuration(att.time_taken)}
+                                    </div>
+                                  </div>
                                 </div>
                               );
                             })}
                           </div>
                         )}
                       </div>
+                    </div>
+                  )}
 
-                      <div className="flex justify-end pt-1">
+                  {/* ─── TAB 3: EDIT PROFILE ─────────────────────────────── */}
+                  {drawerTab === "edit" && (
+                    <form onSubmit={handleSaveUser} className="space-y-4 text-xs animate-in fade-in duration-150">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-semibold">
+                            Full Name
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.full_name}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, full_name: e.target.value })
+                            }
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-semibold">
+                            Username
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.user_name}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, user_name: e.target.value })
+                            }
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-semibold">
+                            University
+                          </label>
+                          <select
+                            value={editForm.university}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                university: e.target.value,
+                                college: "",
+                              })
+                            }
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="">Select University</option>
+                            {universities.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name || u.id}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-semibold">
+                            Academic Level
+                          </label>
+                          <select
+                            value={editForm.year}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, year: e.target.value })
+                            }
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            {LEVEL_OPTIONS.map((l) => (
+                              <option key={l.value} value={l.value}>
+                                {l.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-semibold">
+                            College
+                          </label>
+                          <select
+                            value={editForm.college}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, college: e.target.value })
+                            }
+                            disabled={!editForm.university || editCollegesLoading}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                          >
+                            <option value="">
+                              {!editForm.university
+                                ? "Select University First"
+                                : editCollegesLoading
+                                ? "Loading colleges..."
+                                : "Select College"}
+                            </option>
+                            {editColleges.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-semibold">
+                            Department
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.department}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, department: e.target.value })
+                            }
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Premium Toggle */}
+                      <label className="flex items-center gap-3 p-3.5 bg-amber-500/5 border border-amber-500/20 rounded-2xl cursor-pointer hover:bg-amber-500/10 transition">
+                        <input
+                          type="checkbox"
+                          checked={editForm.is_premium}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, is_premium: e.target.checked })
+                          }
+                          className="rounded border-slate-700 bg-slate-800 text-amber-500 focus:ring-amber-500"
+                        />
+                        <div>
+                          <div className="text-amber-400 font-bold flex items-center gap-1.5">
+                            <Crown className="w-3.5 h-3.5" /> Full Premium Status
+                          </div>
+                          <div className="text-slate-500 text-[10px] mt-0.5">
+                            Manually grant or revoke permanent pro subscription privileges
+                          </div>
+                        </div>
+                      </label>
+
+                      <div className="flex justify-end gap-2 pt-2">
                         <button
                           type="button"
-                          onClick={() => setSelectedUser(null)}
+                          onClick={() => setDrawerTab("overview")}
                           className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
                         >
-                          Done
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSavingUser}
+                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSavingUser && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                          <span>Save Changes</span>
                         </button>
                       </div>
+                    </form>
+                  )}
+
+                  {/* ─── TAB 4: RERUN COURSES (OVERRIDES) ───────────────── */}
+                  {drawerTab === "rerun" && (
+                    <div className="space-y-4 text-xs animate-in fade-in duration-150">
+                      <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl text-cyan-300 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Rerun Course Overrides
+                        </div>
+                        <p className="text-[11px] text-slate-300">
+                          Grants this student permission to practice courses from previous academic levels without restriction.
+                        </p>
+                      </div>
+
+                      {/* Current Overrides */}
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                          Active Course Overrides ({overrides.length})
+                        </h4>
+
+                        {overrides.length === 0 ? (
+                          <div className="p-4 bg-slate-950/40 border border-slate-800 rounded-2xl text-slate-500 text-center italic">
+                            No active course overrides configured.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {overrides.map((ov) => (
+                              <div
+                                key={ov.id}
+                                className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between"
+                              >
+                                <div>
+                                  <span className="font-bold font-mono text-white">
+                                    {ov.course_code}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 ml-2">
+                                    Added {new Date(ov.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+
+                                <button
+                                  onClick={() => handleRemoveOverride(ov.id, ov.course_code)}
+                                  disabled={overrideActionLoading}
+                                  className="text-rose-400 hover:text-rose-300 p-1 text-xs font-bold transition flex items-center gap-1"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Add Course Override */}
+                      <div className="space-y-2 pt-2 border-t border-slate-800">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                          Add Eligible Lower-Level Course
+                        </h4>
+
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search course code or title..."
+                            value={overrideSearch}
+                            onChange={(e) => setOverrideSearch(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none"
+                          />
+                        </div>
+
+                        {candidateLoading ? (
+                          <div className="py-4 text-center text-slate-400 text-xs">
+                            Loading eligible courses...
+                          </div>
+                        ) : (
+                          <div className="max-h-48 overflow-y-auto space-y-1 divide-y divide-slate-800/40 border border-slate-800 rounded-xl bg-slate-950/60 p-1">
+                            {candidateCourses
+                              .filter((c) => {
+                                const currentLevel = parseInt(drawerUser.year || "1", 10) * 100;
+                                const isLower = (c.level || 0) < currentLevel;
+                                const notAdded = !overrides.some(
+                                  (o) => o.course_code?.toLowerCase() === c.course_code?.toLowerCase()
+                                );
+                                const matches =
+                                  !overrideSearch ||
+                                  c.course_code?.toLowerCase().includes(overrideSearch.toLowerCase()) ||
+                                  c.name?.toLowerCase().includes(overrideSearch.toLowerCase());
+                                return isLower && notAdded && matches;
+                              })
+                              .slice(0, 30)
+                              .map((c) => (
+                                <div
+                                  key={c.id || c.course_code}
+                                  className="p-2 flex items-center justify-between hover:bg-slate-800/50 rounded-lg"
+                                >
+                                  <div>
+                                    <span className="font-bold text-white font-mono">{c.course_code}</span>
+                                    <span className="text-slate-400 ml-2">{c.name || c.title}</span>
+                                    <span className="text-[10px] text-slate-500 ml-2">({c.level}L)</span>
+                                  </div>
+
+                                  <button
+                                    onClick={() => handleAddOverride(c.course_code)}
+                                    disabled={overrideActionLoading}
+                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>Add</span>
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  );
-                })()}
+                  )}
+
+                  {/* ─── TAB 5: GRANT PREMIUM ───────────────────────────── */}
+                  {drawerTab === "grant" && (
+                    <form onSubmit={handleGrantPremium} className="space-y-4 text-xs animate-in fade-in duration-150">
+                      <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-300 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <Gift className="w-4 h-4 text-emerald-400" />
+                          Grant Free Trial / Promo Premium
+                        </div>
+                        <p className="text-[11px] text-slate-300">
+                          Instantly provision temporary premium days to reward student contributors or ambassadors.
+                        </p>
+                      </div>
+
+                      {/* Preset Days Picker */}
+                      <div>
+                        <label className="block text-slate-400 mb-1.5 font-semibold">
+                          Duration to Grant
+                        </label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[7, 14, 30, 90].map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setGrantDays(d)}
+                              className={`py-2 rounded-xl font-bold transition text-xs ${
+                                grantDays === d
+                                  ? "bg-emerald-600 text-white shadow-sm"
+                                  : "bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-800"
+                              }`}
+                            >
+                              {d === 90 ? "Semester" : `${d} Days`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Reason */}
+                      <div>
+                        <label className="block text-slate-400 mb-1.5 font-semibold">
+                          Grant Reason Preset
+                        </label>
+                        <select
+                          value={grantPreset}
+                          onChange={(e) => setGrantPreset(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none"
+                        >
+                          <option value="contribution">Content Contribution / Volunteer</option>
+                          <option value="other">Custom Administrative Reason</option>
+                        </select>
+                      </div>
+
+                      {grantPreset === "other" && (
+                        <div>
+                          <label className="block text-slate-400 mb-1 font-semibold">
+                            Custom Reason Note
+                          </label>
+                          <input
+                            type="text"
+                            value={grantReasonText}
+                            onChange={(e) => setGrantReasonText(e.target.value)}
+                            placeholder="e.g. Student campus ambassador promo..."
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setDrawerTab("overview")}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={grantLoading}
+                          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {grantLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                          <span>Grant {grantDays} Days Premium</span>
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Clear All Favourites Modal */}
+      {/* ─── Delete User Dialog ─────────────────────────────────────────── */}
+      {deleteUserDialog && (
+        <ConfirmDialog
+          isOpen={Boolean(deleteUserDialog)}
+          title="Delete Student Account"
+          message={`Are you sure you want to permanently delete the student account for ${
+            deleteUserDialog.name || deleteUserDialog.id
+          }? This will delete all their historical attempts and cannot be undone.`}
+          confirmLabel="Delete Account"
+          confirmVariant="danger"
+          onConfirm={confirmDeleteUser}
+          onCancel={() => setDeleteUserDialog(null)}
+        />
+      )}
+
+      {/* ─── Clear All Favourites Modal ─────────────────────────────────── */}
       {isClearFavsModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center gap-3 text-red-400 border-b border-slate-800 pb-3">
-              <AlertTriangle className="w-7 h-7 shrink-0 text-red-400" />
+            <div className="flex items-center gap-3 text-rose-400 border-b border-slate-800 pb-3">
+              <HeartOff className="w-6 h-6 shrink-0" />
               <h2 className="text-base font-bold text-white">
-                Clear All Favourite Courses
+                Clear All Favourites Platform-Wide
               </h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Are you sure you want to{" "}
-              <strong className="text-red-400">
-                clear all favourite courses
-              </strong>{" "}
-              for <strong className="text-white">ALL users</strong> on the
-              platform at once?
+              Are you sure you want to clear favourite courses for{" "}
+              <strong className="text-rose-400">ALL {total} users</strong>?
             </p>
-
-            <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300 space-y-1">
-              <div className="font-bold">What this action does:</div>
-              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-300">
-                <li>
-                  Resets{" "}
-                  <code className="bg-slate-800 px-1 rounded text-red-300">
-                    favourite_courses
-                  </code>{" "}
-                  array to empty for all student profiles.
-                </li>
-                <li>
-                  Clears every user's saved course list from their homepage
-                  dashboard.
-                </li>
-                <li>Records an audit log entry.</li>
-              </ul>
-            </div>
 
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
               <button
@@ -1373,57 +2031,30 @@ export default function UsersView() {
               <button
                 disabled={isClearingFavs}
                 onClick={handleConfirmClearAllFavourites}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isClearingFavs ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <HeartOff className="w-4 h-4" />
-                )}
-                Yes, Clear All Favourites
+                {isClearingFavs ? <RefreshCw className="w-4 h-4 animate-spin" /> : <HeartOff className="w-4 h-4" />}
+                Yes, Clear All
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Increment Level Modal */}
+      {/* ─── Increment Level Modal ──────────────────────────────────────── */}
       {isIncrementLevelModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center gap-3 text-indigo-400 border-b border-slate-800 pb-3">
-              <TrendingUp className="w-7 h-7 shrink-0 text-indigo-400" />
+              <TrendingUp className="w-6 h-6 shrink-0" />
               <h2 className="text-base font-bold text-white">
                 Promote All Users Level (+1)
               </h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Are you sure you want to{" "}
-              <strong className="text-indigo-400">
-                promote all student levels by +1 level
-              </strong>{" "}
-              platform-wide?
+              Promotes all student levels platform-wide by +1 (100L → 200L, 200L → 300L, 300L → 400L). 400L remains unchanged.
             </p>
-
-            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 space-y-1.5">
-              <div className="font-bold">Promotion Rules:</div>
-              <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-300">
-                <li>
-                  100 Level (100L) → <strong>200 Level (200L)</strong>
-                </li>
-                <li>
-                  200 Level (200L) → <strong>300 Level (300L)</strong>
-                </li>
-                <li>
-                  300 Level (300L) → <strong>400 Level (400L)</strong>
-                </li>
-                <li>
-                  <strong className="text-amber-400">400 Level (400L):</strong>{" "}
-                  Will remain in 400L (unchanged).
-                </li>
-              </ul>
-            </div>
 
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
               <button
@@ -1438,53 +2069,28 @@ export default function UsersView() {
                 onClick={handleConfirmIncrementLevel}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isIncrementingLevel ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <TrendingUp className="w-4 h-4" />
-                )}
-                Yes, Promote Everyone +1
+                {isIncrementingLevel ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                Promote All
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Undo Increment Level Modal */}
+      {/* ─── Undo Increment Level Modal ─────────────────────────────────── */}
       {isUndoModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center gap-3 text-amber-400 border-b border-slate-800 pb-3">
-              <Undo2 className="w-7 h-7 shrink-0 text-amber-400" />
+              <Undo2 className="w-6 h-6 shrink-0" />
               <h2 className="text-base font-bold text-white">
                 Undo Last Promotion
               </h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              This will revert{" "}
-              <strong className="text-amber-400">
-                {undoStatus?.updatedCount ?? 0} users
-              </strong>{" "}
-              back to the level they were at before the last "Promote All
-              Levels" action
-              {undoStatus?.promotedAt
-                ? ` (run on ${new Date(undoStatus.promotedAt).toLocaleString()})`
-                : ""}
-              .
+              Reverts {undoStatus?.updatedCount ?? 0} users back to their previous level.
             </p>
-
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 space-y-1.5">
-              <div className="font-bold flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Note
-              </div>
-              <p className="text-[11px] text-slate-300">
-                This only reverts the most recent promotion, and only within 24
-                hours of it running. Any manual level edits made to individual
-                users since then will NOT be restored.
-              </p>
-            </div>
 
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
               <button
@@ -1499,216 +2105,12 @@ export default function UsersView() {
                 onClick={handleConfirmUndoIncrementLevel}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50"
               >
-                {isUndoingLevel ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Undo2 className="w-4 h-4" />
-                )}
-                Yes, Undo Promotion
+                {isUndoingLevel ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
+                Undo Promotion
               </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Grant Temporary Premium Modal (Feature B) */}
-      {grantModalUser && grantTargetInfo && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Gift className="w-5 h-5 text-emerald-400" />
-                Grant Temporary Premium
-              </h2>
-              <button
-                onClick={closeGrantModal}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Target summary */}
-            <div className="p-3 bg-slate-950/40 border border-slate-800 rounded-xl space-y-1.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-semibold">Target</span>
-                <span className="text-white font-bold">
-                  {grantModalUser.full_name ||
-                    grantModalUser.user_name ||
-                    "Unnamed User"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-semibold">
-                  University / Level
-                </span>
-                <span className="text-slate-300">
-                  {grantModalUser.university || "—"} ·{" "}
-                  {formatLevel(grantModalUser.year)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-semibold">
-                  Plan Status
-                </span>
-                <span>
-                  {grantTargetInfo.isFullSemester ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      <Crown className="w-3 h-3" /> Full Semester
-                    </span>
-                  ) : grantTargetInfo.isTempActive ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                      Temp active · expires{" "}
-                      {grantTargetInfo.expiresAt?.toLocaleDateString()}
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                      Free Tier
-                    </span>
-                  )}
-                </span>
-              </div>
-            </div>
-
-            {/* Full-semester block banner */}
-            {grantTargetInfo.isFullSemester && (
-              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1 text-xs">
-                <div className="font-bold flex items-center gap-1.5 text-amber-400">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  Full-semester user detected
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  This user already has{" "}
-                  <strong className="text-amber-300">
-                    permanent full-semester premium
-                  </strong>{" "}
-                  (not temporary). A free days grant is not required — their
-                  access never expires.
-                </p>
-              </div>
-            )}
-
-            {/* Reason + Day picker form */}
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  Reason for grant
-                </label>
-                <div className="space-y-2">
-                  <label
-                    className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
-                      grantPreset === "contribution"
-                        ? "bg-slate-800 border-emerald-500/50 text-white"
-                        : "bg-slate-950/50 border-slate-800 text-slate-400"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="grantReason"
-                      checked={grantPreset === "contribution"}
-                      onChange={() => setGrantPreset("contribution")}
-                      className="accent-emerald-500"
-                    />
-                    <span className="font-semibold text-[11px]">
-                      Material Contribution
-                    </span>
-                  </label>
-                  <label
-                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
-                      grantPreset === "other"
-                        ? "bg-slate-800 border-emerald-500/50 text-white"
-                        : "bg-slate-950/50 border-slate-800 text-slate-400"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="grantReason"
-                      checked={grantPreset === "other"}
-                      onChange={() => setGrantPreset("other")}
-                      className="mt-0.5 accent-emerald-500"
-                    />
-                    <div className="flex-1 space-y-1.5">
-                      <span className="font-semibold text-[11px]">
-                        Other reason
-                      </span>
-                      <input
-                        type="text"
-                        placeholder="E.g. Bug bounty, Beta tester gift, Support resolution…"
-                        value={grantReasonText}
-                        onChange={(e) => {
-                          setGrantReasonText(e.target.value);
-                          setGrantPreset("other");
-                        }}
-                        onFocus={() => setGrantPreset("other")}
-                        className="w-full px-2.5 py-1.5 bg-slate-950/70 border border-slate-700 rounded-lg text-[11px] text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
-                      />
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  Days to grant
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[3, 7, 14, 30].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setGrantDays(d)}
-                      className={`py-2 rounded-lg text-[11px] font-bold border transition ${
-                        grantDays === d
-                          ? "bg-emerald-500 text-slate-950 border-emerald-500"
-                          : "bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-600"
-                      }`}
-                    >
-                      {d}d
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                type="button"
-                disabled={grantLoading}
-                onClick={closeGrantModal}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={grantLoading || grantTargetInfo.isFullSemester}
-                onClick={handleConfirmGrantDays}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {grantLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Gift className="w-4 h-4" />
-                )}
-                Confirm Grant ({grantDays}d)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete User Confirm Dialog */}
-      {deleteUserDialog && (
-        <ConfirmDialog
-          isOpen
-          onClose={() => setDeleteUserDialog(null)}
-          onConfirm={confirmDeleteUser}
-          title="Delete User Account"
-          message={`Are you sure you want to permanently delete user "${deleteUserDialog.name || deleteUserDialog.id}" and all their attempt records?`}
-          detail="This action cannot be undone."
-          variant="danger"
-          confirmLabel="Yes, Delete User"
-        />
       )}
     </div>
   );
