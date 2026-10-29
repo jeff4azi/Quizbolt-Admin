@@ -840,7 +840,7 @@ export default function UsersView() {
               }}
               className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer max-w-[130px] truncate"
             >
-              <option value="" className="bg-slate-900 text-white">All Campuses</option>
+              <option value="" className="bg-slate-900 text-white">All Universities</option>
               {universities.map((u) => (
                 <option key={u.id} value={u.id} className="bg-slate-900 text-white">
                   {u.name || u.id}
@@ -862,7 +862,7 @@ export default function UsersView() {
               className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer max-w-[130px] truncate disabled:opacity-50"
             >
               <option value="" className="bg-slate-900 text-white">
-                {university ? "All Colleges" : "Select Campus First"}
+                {university ? "All Colleges" : "Select University First"}
               </option>
               {filterColleges.map((c) => (
                 <option key={c.id} value={c.id} className="bg-slate-900 text-white">
