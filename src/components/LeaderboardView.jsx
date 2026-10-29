@@ -51,6 +51,8 @@ export default function LeaderboardView() {
   const [selectedWeek, setSelectedWeek] = useState("");
   const [universityFilter, setUniversityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [courseFilter, setCourseFilter] = useState("all");
+  const [courses, setCourses] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("rank"); // 'rank' | 'score' | 'pace' | 'attempts' | 'name'
 
@@ -59,6 +61,26 @@ export default function LeaderboardView() {
   const [auditDetails, setAuditDetails] = useState(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+
+  // Fetch Available Courses for filter
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const token = session?.session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/admin/courses?limit=150`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          setCourses(resData.courses || []);
+        }
+      } catch (err) {
+        console.error("Failed to load courses for leaderboard filter:", err);
+      }
+    };
+    fetchCourses();
+  }, []);
 
   // Fetch Leaderboard Data
   const fetchLeaderboard = async () => {
@@ -71,6 +93,7 @@ export default function LeaderboardView() {
         mode: viewMode,
         university: universityFilter,
         type: typeFilter,
+        course_id: courseFilter,
         limit: "100",
       });
 
@@ -98,7 +121,7 @@ export default function LeaderboardView() {
 
   useEffect(() => {
     fetchLeaderboard();
-  }, [viewMode, selectedWeek, universityFilter, typeFilter]);
+  }, [viewMode, selectedWeek, universityFilter, typeFilter, courseFilter]);
 
   // Recompute snapshot
   const handleRecompute = async () => {
@@ -225,6 +248,17 @@ export default function LeaderboardView() {
   const filteredRankings = useMemo(() => {
     let list = [...(data.rankings || [])];
 
+    // Client-side user deduplication guarantee
+    const seen = new Set();
+    const uniqueList = [];
+    for (const item of list) {
+      if (!seen.has(item.user_id)) {
+        seen.add(item.user_id);
+        uniqueList.push(item);
+      }
+    }
+    list = uniqueList;
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter((r) => {
@@ -244,7 +278,12 @@ export default function LeaderboardView() {
     }
 
     if (sortBy === "score") {
-      list.sort((a, b) => b.best_percent - a.best_percent);
+      list.sort((a, b) => {
+        if (b.best_percent !== a.best_percent) return b.best_percent - a.best_percent;
+        const timeA = a.best_attempt?.time_taken_seconds ?? 999999;
+        const timeB = b.best_attempt?.time_taken_seconds ?? 999999;
+        return timeA - timeB;
+      });
     } else if (sortBy === "pace") {
       list.sort((a, b) => {
         const paceA = a.best_attempt?.pace_seconds_per_question ?? 999999;
@@ -505,18 +544,43 @@ export default function LeaderboardView() {
             </select>
           </div>
 
-          {/* Exam Type Filter */}
+          {/* Exam Type Segmented Pills */}
+          <div className="bg-slate-950 border border-slate-800 p-1 rounded-xl flex items-center">
+            {[
+              { id: "all", label: "All Modes" },
+              { id: "OBJ", label: "OBJ" },
+              { id: "FIB", label: "FIB" },
+              { id: "THY", label: "Theory" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTypeFilter(t.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  typeFilter === t.id
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Course Filter */}
           <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
             <BookOpen className="w-3.5 h-3.5 text-slate-400" />
             <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
+              value={courseFilter}
+              onChange={(e) => setCourseFilter(e.target.value)}
+              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer max-w-[130px] truncate"
             >
-              <option value="all" className="bg-slate-900 text-white">All Exam Types</option>
-              <option value="OBJ" className="bg-slate-900 text-white">Objective (OBJ)</option>
-              <option value="FIB" className="bg-slate-900 text-white">Fill-in-the-Blank (FIB)</option>
-              <option value="THY" className="bg-slate-900 text-white">Theory (THY)</option>
+              <option value="all" className="bg-slate-900 text-white">All Courses</option>
+              {courses.map((c) => (
+                <option key={c.id || c.course_code} value={c.course_code} className="bg-slate-900 text-white">
+                  {c.course_code} - {c.name || c.title}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -568,16 +632,17 @@ export default function LeaderboardView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredRankings.map((row) => {
+                {filteredRankings.map((row, idx) => {
                   const student = row.student;
                   const attempt = row.best_attempt;
-                  const isTop1 = row.rank === 1;
-                  const isTop2 = row.rank === 2;
-                  const isTop3 = row.rank === 3;
+                  const displayRank = sortBy === "rank" ? (row.rank || idx + 1) : idx + 1;
+                  const isTop1 = displayRank === 1;
+                  const isTop2 = displayRank === 2;
+                  const isTop3 = displayRank === 3;
 
                   return (
                     <tr
-                      key={`${row.user_id}_${row.rank}`}
+                      key={row.user_id}
                       className={`hover:bg-slate-800/40 transition group ${
                         row.is_suspicious_speed ? "bg-rose-950/15" : ""
                       }`}
@@ -585,20 +650,20 @@ export default function LeaderboardView() {
                       {/* Rank Medal */}
                       <td className="py-3.5 px-4 font-black">
                         {isTop1 ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono text-xs">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-black text-xs shadow-sm">
                             🥇 #1
                           </span>
                         ) : isTop2 ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-300/20 text-slate-200 border border-slate-300/40 font-mono text-xs">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-300/20 text-slate-200 border border-slate-300/40 font-mono font-black text-xs shadow-sm">
                             🥈 #2
                           </span>
                         ) : isTop3 ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-700/20 text-amber-400 border border-amber-700/40 font-mono text-xs">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-700/20 text-amber-400 border border-amber-700/40 font-mono font-black text-xs shadow-sm">
                             🥉 #3
                           </span>
                         ) : (
-                          <span className="font-mono text-slate-400 font-bold px-2 py-0.5">
-                            #{row.rank}
+                          <span className="inline-flex items-center justify-center font-mono text-slate-400 font-bold px-2 py-0.5 rounded bg-slate-950/60 border border-slate-800/80 min-w-[32px]">
+                            #{displayRank}
                           </span>
                         )}
                       </td>
