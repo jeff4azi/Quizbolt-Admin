@@ -42,6 +42,27 @@ export default function DashboardView({ onNavigate }) {
     reports_this_week: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [onlineCount, setOnlineCount] = useState(null);
+
+  // Poll platform-wide online count (users active in last 90s)
+  const fetchOnlineCount = async () => {
+    try {
+      const threshold = new Date(Date.now() - 90_000).toISOString();
+      const { count } = await supabase
+        .from("user_presence")
+        .select("*", { count: "exact", head: true })
+        .gte("last_seen", threshold);
+      if (typeof count === "number") setOnlineCount(count);
+    } catch (err) {
+      console.warn("Could not fetch online count:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchOnlineCount();
+    const interval = setInterval(fetchOnlineCount, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const loadStats = async () => {
     setLoading(true);
@@ -166,6 +187,12 @@ export default function DashboardView({ onNavigate }) {
         {/* Inline pulse indicators */}
         {!loading && kpis.newSignups24h > 0 && (
           <div className="relative mt-4 flex flex-wrap gap-3">
+            {onlineCount !== null && (
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {onlineCount} scholar{onlineCount !== 1 ? "s" : ""} online now
+              </div>
+            )}
             <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               {kpis.newSignups24h} new student
@@ -190,6 +217,20 @@ export default function DashboardView({ onNavigate }) {
 
       {/* ── Primary KPI Grid ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <KpiCard
+          icon={
+            <span className="relative flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" />
+              <span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-emerald-400" />
+            </span>
+          }
+          label="Scholars Online Now"
+          value={onlineCount ?? "—"}
+          sub="Active in last 90 seconds"
+          subColor="text-emerald-400"
+          valueColor="text-emerald-400"
+          loading={onlineCount === null}
+        />
         <KpiCard
           icon={<Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />}
           label="Total Students"

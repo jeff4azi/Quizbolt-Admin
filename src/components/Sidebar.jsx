@@ -1,5 +1,6 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useOnlineCount } from "../hooks/useOnlineCount";
 import {
   LayoutDashboard,
   Users,
@@ -26,7 +27,7 @@ import Logo from "../images/Logo";
 export default function Sidebar({ adminRecord, onLogout, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
-
+  const onlineCount = useOnlineCount();
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "users", label: "Users & Overrides", icon: Users },
@@ -114,6 +115,18 @@ export default function Sidebar({ adminRecord, onLogout, onClose }) {
 
       {/* Admin Profile & Logout */}
       <div className="pt-3 border-t border-slate-800/80 space-y-2.5 shrink-0 bg-[#0B0F17]">
+        {/* Online count pill */}
+        {onlineCount !== null && (
+          <div className="flex items-center gap-2 px-2.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            </span>
+            <span className="text-[11px] font-bold text-emerald-400">
+              {onlineCount} scholar{onlineCount !== 1 ? "s" : ""} online now
+            </span>
+          </div>
+        )}
         <div className="p-2.5 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between">
           <div className="overflow-hidden">
             <div className="text-xs font-bold text-white truncate">

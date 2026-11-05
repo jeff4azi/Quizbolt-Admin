@@ -27,6 +27,7 @@ import AdminUsersView from "./components/AdminUsersView";
 import AuditLogView from "./components/AuditLogView";
 import AdsView from "./components/AdsView";
 import { RefreshCw, Menu } from "lucide-react";
+import { useOnlineCount } from "./hooks/useOnlineCount";
 
 // ─── QuestionBank wrapper — reads course/uni from URL search params ───────────
 function QuestionBankRoute({ adminRecord }) {
@@ -46,6 +47,7 @@ function QuestionBankRoute({ adminRecord }) {
 function AdminShell({ adminRecord, onLogout }) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const onlineCount = useOnlineCount();
 
   const handleTabChange = (tab) => {
     navigate(`/${tab}`);
@@ -86,9 +88,18 @@ function AdminShell({ adminRecord, onLogout }) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-black text-white tracking-tight">
+          <span className="text-sm font-black text-white tracking-tight flex-1">
             QuizBolt Admin
           </span>
+          {onlineCount !== null && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold whitespace-nowrap">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+              </span>
+              {onlineCount} online
+            </div>
+          )}
         </div>
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-950">
