@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -22,13 +23,10 @@ import {
 } from "lucide-react";
 import Logo from "../images/Logo";
 
-export default function Sidebar({
-  activeTab,
-  setActiveTab,
-  adminRecord,
-  onLogout,
-  onClose,
-}) {
+export default function Sidebar({ adminRecord, onLogout, onClose }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "users", label: "Users & Overrides", icon: Users },
@@ -51,6 +49,11 @@ export default function Sidebar({
     { id: "admins", label: "Admin Staff & Roles", icon: Shield },
     { id: "audit", label: "Audit Trail Log", icon: ShieldCheck },
   ];
+
+  const handleNav = (id) => {
+    navigate(`/${id}`);
+    onClose?.();
+  };
 
   return (
     <aside className="w-72 lg:w-64 h-screen bg-[#0B0F17] border-r border-slate-800/80 flex flex-col justify-between p-4 text-slate-300 select-none shrink-0">
@@ -80,11 +83,14 @@ export default function Sidebar({
         <nav className="space-y-0.5">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            // Mark active if the current path starts with /{item.id}
+            const isActive =
+              location.pathname === `/${item.id}` ||
+              location.pathname.startsWith(`/${item.id}/`);
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleNav(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition ${
                   isActive
                     ? "bg-indigo-600 text-white"

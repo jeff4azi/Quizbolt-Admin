@@ -1,4 +1,12 @@
 import React, { useState, useEffect } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
@@ -20,16 +28,122 @@ import AuditLogView from "./components/AuditLogView";
 import AdsView from "./components/AdsView";
 import { RefreshCw, Menu } from "lucide-react";
 
+// ─── QuestionBank wrapper — reads course/uni from URL search params ───────────
+function QuestionBankRoute({ adminRecord }) {
+  const [searchParams] = useSearchParams();
+  const code = searchParams.get("course") || "";
+  const uni = searchParams.get("uni") || "";
+  return (
+    <QuestionBank
+      initialCourseCode={code}
+      initialUniversity={uni}
+      adminRecord={adminRecord}
+    />
+  );
+}
+
+// ─── Main shell (only shown when authenticated) ───────────────────────────────
+function AdminShell({ adminRecord, onLogout }) {
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleTabChange = (tab) => {
+    navigate(`/${tab}`);
+    setSidebarOpen(false);
+  };
+
+  return (
+    <div className="h-screen flex overflow-hidden bg-slate-950 font-sans antialiased text-slate-100">
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 lg:static lg:z-auto lg:flex lg:shrink-0 transition-transform duration-300 ease-in-out ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
+        <Sidebar
+          adminRecord={adminRecord}
+          onLogout={onLogout}
+          onClose={() => setSidebarOpen(false)}
+        />
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Mobile top bar */}
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-[#0B0F17] border-b border-slate-800/80 shrink-0 z-30">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <span className="text-sm font-black text-white tracking-tight">
+            QuizBolt Admin
+          </span>
+        </div>
+
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-950">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="/dashboard"
+              element={<DashboardView onNavigate={handleTabChange} />}
+            />
+            <Route path="/users" element={<UsersView />} />
+            <Route path="/universities" element={<UniversitiesView />} />
+            <Route
+              path="/courses"
+              element={
+                <CoursesView
+                  onNavigateToQuestions={(code, uni) => {
+                    const params = new URLSearchParams();
+                    if (code) params.set("course", code);
+                    if (uni) params.set("uni", uni);
+                    navigate(`/questions?${params.toString()}`);
+                    setSidebarOpen(false);
+                  }}
+                />
+              }
+            />
+            <Route
+              path="/questions"
+              element={<QuestionBankRoute adminRecord={adminRecord} />}
+            />
+            <Route path="/premium" element={<PremiumView />} />
+            <Route path="/reviews" element={<ReviewsView />} />
+            <Route path="/reports" element={<ReportsView />} />
+            <Route path="/referrals" element={<ReferralsView />} />
+            <Route path="/leaderboard" element={<LeaderboardView />} />
+            <Route path="/analytics" element={<AnalyticsView />} />
+            <Route path="/notifications" element={<NotificationsView />} />
+            <Route path="/ads" element={<AdsView />} />
+            <Route path="/cms" element={<ContentCmsView />} />
+            <Route path="/admins" element={<AdminUsersView />} />
+            <Route path="/audit" element={<AuditLogView />} />
+            {/* Catch-all → dashboard */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ─── Root — handles auth, then renders shell inside BrowserRouter ─────────────
 export default function App() {
   const [user, setUser] = useState(null);
   const [adminRecord, setAdminRecord] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [selectedCourseCode, setSelectedCourseCode] = useState("");
-  const [selectedUniversity, setSelectedUniversity] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Check initial Supabase auth session & verify admin role
   useEffect(() => {
     async function checkAuth() {
       try {
@@ -69,9 +183,7 @@ export default function App() {
       },
     );
 
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
+    return () => authListener?.subscription?.unsubscribe();
   }, []);
 
   const handleLoginSuccess = (authUser, adminRec) => {
@@ -83,15 +195,6 @@ export default function App() {
     await supabase.auth.signOut();
     setUser(null);
     setAdminRecord(null);
-  };
-
-  const handleTabChange = (tab) => {
-    if (tab !== "questions") {
-      setSelectedCourseCode("");
-      setSelectedUniversity("");
-    }
-    setActiveTab(tab);
-    setSidebarOpen(false); // always close drawer after nav on mobile
   };
 
   if (loadingAuth) {
@@ -106,87 +209,16 @@ export default function App() {
   }
 
   if (!user || !adminRecord) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <BrowserRouter>
+        <Login onLoginSuccess={handleLoginSuccess} />
+      </BrowserRouter>
+    );
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-slate-950 font-sans antialiased text-slate-100">
-      {/* Mobile backdrop — clicking it closes the sidebar drawer */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar — always visible on lg+, slide-in drawer on mobile */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 lg:static lg:z-auto lg:flex lg:shrink-0 transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
-      >
-        <Sidebar
-          activeTab={activeTab}
-          setActiveTab={handleTabChange}
-          adminRecord={adminRecord}
-          onLogout={handleLogout}
-          onClose={() => setSidebarOpen(false)}
-        />
-      </div>
-
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        {/* Mobile top bar — hamburger menu, only visible on small screens */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-[#0B0F17] border-b border-slate-800/80 shrink-0 z-30">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-            aria-label="Open navigation menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <span className="text-sm font-black text-white tracking-tight">
-            QuizBolt Admin
-          </span>
-        </div>
-
-        {/* Scrollable view area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-950">
-          {activeTab === "dashboard" && (
-            <DashboardView onNavigate={handleTabChange} />
-          )}
-          {activeTab === "users" && <UsersView />}
-          {activeTab === "universities" && <UniversitiesView />}
-          {activeTab === "courses" && (
-            <CoursesView
-              onNavigateToQuestions={(code, uni) => {
-                setSelectedCourseCode(code);
-                setSelectedUniversity(uni || "");
-                setActiveTab("questions");
-                setSidebarOpen(false);
-              }}
-            />
-          )}
-          {activeTab === "questions" && (
-            <QuestionBank
-              initialCourseCode={selectedCourseCode}
-              initialUniversity={selectedUniversity}
-              adminRecord={adminRecord}
-            />
-          )}
-          {activeTab === "premium" && <PremiumView />}
-          {activeTab === "reviews" && <ReviewsView />}
-          {activeTab === "reports" && <ReportsView />}
-          {activeTab === "referrals" && <ReferralsView />}
-          {activeTab === "leaderboard" && <LeaderboardView />}
-          {activeTab === "analytics" && <AnalyticsView />}
-          {activeTab === "notifications" && <NotificationsView />}
-          {activeTab === "ads" && <AdsView />}
-          {activeTab === "cms" && <ContentCmsView />}
-          {activeTab === "admins" && <AdminUsersView />}
-          {activeTab === "audit" && <AuditLogView />}
-        </main>
-      </div>
-    </div>
+    <BrowserRouter>
+      <AdminShell adminRecord={adminRecord} onLogout={handleLogout} />
+    </BrowserRouter>
   );
 }
