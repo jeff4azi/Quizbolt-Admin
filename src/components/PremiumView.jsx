@@ -19,6 +19,16 @@ import {
   BarChart3,
   GraduationCap,
   Wallet,
+  Users,
+  Activity,
+  BookOpen,
+  Mail,
+  Flame,
+  Award,
+  HeartOff,
+  Edit2,
+  Gift,
+  RotateCcw,
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
@@ -59,6 +69,94 @@ export default function PremiumView() {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [uniFilter, setUniFilter] = useState("");
+
+  // ─── User Drawer State ────────────────────────────────────────────────────
+  const [drawerUser, setDrawerUser] = useState(null);
+  const [drawerTab, setDrawerTab] = useState("overview");
+  const [drawerDetails, setDrawerDetails] = useState(null);
+  const [loadingDrawerDetails, setLoadingDrawerDetails] = useState(false);
+  const [loadingUserLookup, setLoadingUserLookup] = useState(null); // stores the email being looked up
+  const [copiedId, setCopiedId] = useState(false);
+
+  const LEVEL_LABELS = {
+    1: "100 Level",
+    2: "200 Level",
+    3: "300 Level",
+    4: "400 Level",
+  };
+  const formatLevel = (year) => LEVEL_LABELS[Number(year)] || `Year ${year}`;
+  const formatDuration = (secs) => {
+    if (!secs || isNaN(secs)) return "0m";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  const openDrawerForUser = async (user) => {
+    setDrawerUser(user);
+    setDrawerTab("overview");
+    setDrawerDetails(null);
+    setLoadingDrawerDetails(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users/${user.id}/details`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (res.ok) {
+        const details = await res.json();
+        setDrawerDetails(details);
+      }
+    } catch (err) {
+      console.error("Failed to load user details:", err);
+    } finally {
+      setLoadingDrawerDetails(false);
+    }
+  };
+
+  const handleEmailClick = async (email, userId) => {
+    if (!email && !userId) return;
+    const key = email || userId;
+    setLoadingUserLookup(key);
+    try {
+      // Try lookup by user_id first (most reliable), then by email
+      let user = null;
+      if (userId) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+        user = data;
+      }
+      if (!user && email) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("email", email)
+          .single();
+        user = data;
+      }
+      if (user) {
+        openDrawerForUser(user);
+      }
+    } catch (err) {
+      console.error("User lookup failed:", err);
+    } finally {
+      setLoadingUserLookup(null);
+    }
+  };
+
+  const closeDrawer = () => {
+    setDrawerUser(null);
+    setDrawerDetails(null);
+  };
 
   const fetchCodes = async () => {
     setLoading(true);
@@ -199,7 +297,10 @@ export default function PremiumView() {
         fetchCodes();
       }
     } catch (err) {
-      setNotification({ type: "error", text: `Error generating codes: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error generating codes: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     }
   };
@@ -230,7 +331,10 @@ export default function PremiumView() {
       setTimeout(() => setNotification(null), 5000);
       fetchCodes();
     } catch (err) {
-      setNotification({ type: "error", text: `Error revoking premium: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error revoking premium: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsRevoking(false);
@@ -271,7 +375,10 @@ export default function PremiumView() {
       setTimeout(() => setNotification(null), 5000);
       fetchCodes();
     } catch (err) {
-      setNotification({ type: "error", text: `Error deleting codes: ${err.message}` });
+      setNotification({
+        type: "error",
+        text: `Error deleting codes: ${err.message}`,
+      });
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setIsDeletingCodes(false);
@@ -874,7 +981,27 @@ export default function PremiumView() {
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-300 font-medium">
-                      {c.used_by_email || c.used_by_user_id || "-"}
+                      {c.used_by_email || c.used_by_user_id ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleEmailClick(c.used_by_email, c.used_by_user_id)
+                          }
+                          disabled={
+                            loadingUserLookup ===
+                            (c.used_by_email || c.used_by_user_id)
+                          }
+                          className="text-indigo-400 hover:text-indigo-300 hover:underline font-mono text-xs transition disabled:opacity-60 flex items-center gap-1.5"
+                        >
+                          {loadingUserLookup ===
+                          (c.used_by_email || c.used_by_user_id) ? (
+                            <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
+                          ) : null}
+                          {c.used_by_email || c.used_by_user_id}
+                        </button>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-400">
@@ -1107,6 +1234,457 @@ export default function PremiumView() {
           </div>
         </div>
       )}
+      {/* ── USER DRAWER ─────────────────────────────────────────────────── */}
+      {drawerUser && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex justify-end animate-in fade-in duration-200">
+          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-2xl h-full flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-300">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-800 bg-slate-950/60 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3.5">
+                  {drawerUser.avatar_url ? (
+                    <img
+                      src={drawerUser.avatar_url}
+                      alt={drawerUser.full_name || drawerUser.user_name}
+                      className="w-12 h-12 rounded-2xl object-cover border-2 border-indigo-500/40 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-300 font-bold text-lg shrink-0">
+                      {drawerUser.full_name?.charAt(0)?.toUpperCase() ||
+                        drawerUser.user_name?.charAt(0)?.toUpperCase() ||
+                        "S"}
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-black text-white">
+                        {drawerUser.full_name || "Unnamed Scholar"}
+                      </h2>
+                      {drawerUser.is_premium ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          <Crown className="w-3 h-3 text-amber-400" /> PRO
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                          Free
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
+                      <span>@{drawerUser.user_name || "user"}</span>
+                      <span>•</span>
+                      <span className="text-indigo-400 font-bold uppercase">
+                        {drawerUser.university || "No Campus"}
+                      </span>
+                      <span>•</span>
+                      <span>{formatLevel(drawerUser.year)}</span>
+                    </div>
+                    <div className="mt-2">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(drawerUser.id);
+                          setCopiedId(true);
+                          setTimeout(() => setCopiedId(false), 2000);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 hover:border-slate-700 text-[10px] font-mono text-slate-400 hover:text-slate-200 transition"
+                      >
+                        <Copy className="w-3 h-3 text-slate-500" />
+                        <span>{drawerUser.id}</span>
+                        {copiedId && (
+                          <span className="text-emerald-400 text-[9px] font-bold ml-1">
+                            COPIED!
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={closeDrawer}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex items-center gap-1 mt-5 bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs overflow-x-auto">
+                {[
+                  {
+                    id: "overview",
+                    icon: <Users className="w-3.5 h-3.5" />,
+                    label: "Overview",
+                  },
+                  {
+                    id: "attempts",
+                    icon: <Activity className="w-3.5 h-3.5" />,
+                    label: "Exams",
+                  },
+                ].map(({ id, icon, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setDrawerTab(id)}
+                    className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                      drawerTab === id
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                    {id === "attempts" &&
+                      drawerDetails?.stats?.total_attempts > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black bg-indigo-500/30 text-indigo-200">
+                          {drawerDetails.stats.total_attempts}
+                        </span>
+                      )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {loadingDrawerDetails ? (
+                <div className="py-24 text-center text-slate-400 space-y-3">
+                  <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs">Loading student profile...</p>
+                </div>
+              ) : (
+                <>
+                  {/* ── OVERVIEW ── */}
+                  {drawerTab === "overview" && (
+                    <div className="space-y-5 animate-in fade-in duration-150">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Total Exams
+                          </span>
+                          <div className="text-xl font-black text-white font-mono mt-1">
+                            {drawerDetails?.stats?.total_attempts || 0}
+                          </div>
+                          <span className="text-[10px] text-slate-500">
+                            Attempted
+                          </span>
+                        </div>
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Best Score
+                          </span>
+                          <div className="text-xl font-black text-emerald-400 font-mono mt-1">
+                            {drawerDetails?.stats?.best_score_percent
+                              ? `${drawerDetails.stats.best_score_percent}%`
+                              : "0%"}
+                          </div>
+                          <span className="text-[10px] text-slate-500">
+                            Peak test score
+                          </span>
+                        </div>
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Avg Score
+                          </span>
+                          <div className="text-xl font-black text-amber-400 font-mono mt-1">
+                            {drawerDetails?.stats?.average_percent
+                              ? `${drawerDetails.stats.average_percent}%`
+                              : "0%"}
+                          </div>
+                          <span className="text-[10px] text-slate-500">
+                            Cohort average
+                          </span>
+                        </div>
+                        <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                            Study Time
+                          </span>
+                          <div className="text-xl font-black text-cyan-400 font-mono mt-1">
+                            {formatDuration(
+                              drawerDetails?.stats?.total_duration_seconds,
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500">
+                            Time spent
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <GraduationCap className="w-4 h-4 text-indigo-400" />
+                          Academic Profile
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              Campus:
+                            </span>
+                            <div className="font-bold text-slate-200 mt-0.5">
+                              {drawerDetails?.profile?.university ||
+                                drawerUser.university ||
+                                "—"}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              College:
+                            </span>
+                            <div className="font-bold text-slate-200 mt-0.5">
+                              {drawerDetails?.profile?.college ||
+                                drawerUser.college ||
+                                "—"}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              Department:
+                            </span>
+                            <div className="font-bold text-slate-200 mt-0.5">
+                              {drawerDetails?.profile?.department ||
+                                drawerUser.department ||
+                                "—"}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              Academic Level:
+                            </span>
+                            <div className="font-bold text-indigo-400 mt-0.5">
+                              {formatLevel(
+                                drawerDetails?.profile?.year || drawerUser.year,
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <Mail className="w-4 h-4 text-indigo-400" />
+                          Account & Activity Information
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              Registered Email:
+                            </span>
+                            <div className="font-mono text-slate-200 mt-0.5 flex items-center gap-1">
+                              <span>
+                                {drawerDetails?.profile?.email ||
+                                  "No email on record"}
+                              </span>
+                              {drawerDetails?.profile?.email_confirmed_at && (
+                                <span
+                                  className="text-emerald-400 text-[10px]"
+                                  title="Email Verified"
+                                >
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              Current Streak:
+                            </span>
+                            <div className="font-mono font-bold text-amber-400 mt-0.5 flex items-center gap-1">
+                              <Flame className="w-3.5 h-3.5" />
+                              <span>
+                                {drawerDetails?.profile?.current_streak || 0}{" "}
+                                days
+                              </span>
+                              <span className="text-slate-500 text-[10px]">
+                                (Best:{" "}
+                                {drawerDetails?.profile?.best_streak || 0}d)
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              Registered On:
+                            </span>
+                            <div className="text-slate-300 mt-0.5">
+                              {drawerDetails?.profile?.created_at
+                                ? new Date(
+                                    drawerDetails.profile.created_at,
+                                  ).toLocaleDateString(undefined, {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                : "N/A"}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[11px]">
+                              Last Study Activity:
+                            </span>
+                            <div className="text-slate-300 mt-0.5">
+                              {drawerDetails?.profile?.last_study_date
+                                ? new Date(
+                                    drawerDetails.profile.last_study_date,
+                                  ).toLocaleDateString()
+                                : "No activity"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 space-y-2.5">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <BookOpen className="w-4 h-4 text-indigo-400" />
+                          Saved Favourite Courses
+                        </h4>
+                        {Array.isArray(
+                          drawerDetails?.profile?.favourite_courses,
+                        ) &&
+                        drawerDetails.profile.favourite_courses.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {drawerDetails.profile.favourite_courses.map(
+                              (code) => (
+                                <span
+                                  key={code}
+                                  className="px-2.5 py-1 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 font-mono font-bold text-xs"
+                                >
+                                  {code}
+                                </span>
+                              ),
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">
+                            No favourite courses bookmarked yet.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── EXAMS ── */}
+                  {drawerTab === "attempts" && (
+                    <div className="space-y-4 animate-in fade-in duration-150">
+                      {drawerDetails?.rank_history &&
+                        drawerDetails.rank_history.length > 0 && (
+                          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2.5">
+                            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                              <Award className="w-4 h-4 text-amber-400" />
+                              Leaderboard Rankings
+                            </h4>
+                            <div className="flex flex-wrap gap-2">
+                              {drawerDetails.rank_history.map((rh, idx) => (
+                                <div
+                                  key={idx}
+                                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono flex items-center gap-2"
+                                >
+                                  <span className="font-bold text-amber-400">
+                                    #{rh.rank}
+                                  </span>
+                                  <span className="text-slate-400 text-[10px]">
+                                    {new Date(
+                                      rh.week_start,
+                                    ).toLocaleDateString()}
+                                  </span>
+                                  <span className="text-slate-300 font-bold">
+                                    {rh.best_percent
+                                      ? `${Math.round(rh.best_percent)}%`
+                                      : ""}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        Exam Attempts ({drawerDetails?.attempts?.length || 0})
+                      </h4>
+                      {!drawerDetails?.attempts ||
+                      drawerDetails.attempts.length === 0 ? (
+                        <div className="py-12 text-center text-slate-500 text-xs bg-slate-950/40 border border-slate-800 rounded-2xl">
+                          No exam attempts recorded yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {drawerDetails.attempts.map((att) => {
+                            const pct =
+                              att.total_questions > 0
+                                ? Math.round(
+                                    (att.score / att.total_questions) * 100,
+                                  )
+                                : 0;
+                            const pace =
+                              att.total_questions > 0
+                                ? Math.round(
+                                    (att.time_taken / att.total_questions) * 10,
+                                  ) / 10
+                                : null;
+                            return (
+                              <div
+                                key={att.id}
+                                className="p-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-2xl flex items-center justify-between gap-3 text-xs transition"
+                              >
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-white font-mono">
+                                      {att.course_id || "EXAM"}
+                                    </span>
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-slate-800 text-slate-300">
+                                      {att.type || "OBJ"}
+                                    </span>
+                                    {att.is_retake && (
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400">
+                                        Retake
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
+                                    <span>
+                                      {att.date_taken
+                                        ? new Date(
+                                            att.date_taken,
+                                          ).toLocaleString(undefined, {
+                                            dateStyle: "short",
+                                            timeStyle: "short",
+                                          })
+                                        : ""}
+                                    </span>
+                                    {pace !== null && (
+                                      <>
+                                        <span>•</span>
+                                        <span className="font-mono text-cyan-400">
+                                          {pace}s/q
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    <span
+                                      className={`font-black font-mono text-sm ${pct >= 70 ? "text-emerald-400" : pct >= 50 ? "text-amber-400" : "text-rose-400"}`}
+                                    >
+                                      {pct}%
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-mono">
+                                      ({att.score}/{att.total_questions})
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                    {formatDuration(att.time_taken)}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete All Codes Modal */}
       {isDeleteAllCodesOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
