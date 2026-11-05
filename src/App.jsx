@@ -211,7 +211,12 @@ export default function App() {
   if (!user || !adminRecord) {
     return (
       <BrowserRouter>
-        <Login onLoginSuccess={handleLoginSuccess} />
+        <Routes>
+          <Route
+            path="*"
+            element={<Login onLoginSuccess={handleLoginSuccess} />}
+          />
+        </Routes>
       </BrowserRouter>
     );
   }
