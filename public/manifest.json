@@ -1,0 +1,17 @@
+{
+  "name": "QuizBolt Admin",
+  "short_name": "QB Admin",
+  "description": "QuizBolt administration panel",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#080C13",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

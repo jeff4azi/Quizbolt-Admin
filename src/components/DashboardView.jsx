@@ -23,17 +23,24 @@ import {
   BarChart3,
   Flag,
   MessageSquare,
+  Wifi,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 
 export default function DashboardView({ onNavigate }) {
   const navigate = useNavigate();
-  const go = (tab) => {
-    if (onNavigate) go(tab);
-    else navigate(`/${tab}`);
-  };
+  const go = (tab) => navigate(`/${tab}`);
+
   const [stats, setStats] = useState(null);
   const [messagingStats, setMessagingStats] = useState({
     total_connections: 0,
@@ -122,6 +129,7 @@ export default function DashboardView({ onNavigate }) {
   }, []);
 
   const kpis = stats?.kpis || {};
+  const overview = stats?.overview || {};
   const needsAttention = stats?.needsAttention || {};
   const recentSignups = stats?.recentSignups || [];
   const recentAuditLogs = stats?.recentAuditLogs || [];
@@ -184,15 +192,9 @@ export default function DashboardView({ onNavigate }) {
           </div>
         </div>
 
-        {/* Inline pulse indicators */}
+        {/* Inline pulse indicators — online count pill removed */}
         {!loading && kpis.newSignups24h > 0 && (
           <div className="relative mt-4 flex flex-wrap gap-3">
-            {onlineCount !== null && (
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                {onlineCount} scholar{onlineCount !== 1 ? "s" : ""} online now
-              </div>
-            )}
             <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               {kpis.newSignups24h} new student
@@ -215,28 +217,60 @@ export default function DashboardView({ onNavigate }) {
         )}
       </div>
 
-      {/* ── Primary KPI Grid ── */}
+      {/* ── Scholars Online Now — Dedicated Banner ── */}
+      <button
+        onClick={() => go("online")}
+        className="w-full relative overflow-hidden bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/60 border border-emerald-700/40 rounded-2xl px-5 py-4 shadow-lg hover:border-emerald-500/60 hover:shadow-emerald-900/30 hover:shadow-xl transition-all group text-left"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(52,211,153,0.07),transparent_60%)] pointer-events-none" />
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {/* Pulse dot */}
+            <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 shrink-0">
+              <span className="animate-ping absolute inline-flex h-5 w-5 rounded-full bg-emerald-400 opacity-30" />
+              <Wifi className="relative w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
+                  Live Now
+                </span>
+              </div>
+              <div className="text-white font-black text-xl sm:text-2xl leading-tight mt-0.5">
+                {onlineCount === null ? (
+                  <span className="text-slate-600 text-lg">Loading…</span>
+                ) : (
+                  <>
+                    {onlineCount.toLocaleString()}{" "}
+                    <span className="text-emerald-400">
+                      Scholar{onlineCount !== 1 ? "s" : ""}
+                    </span>{" "}
+                    Online Now
+                  </>
+                )}
+              </div>
+              <div className="text-slate-400 text-xs mt-0.5">
+                Active in the last 90 seconds across all universities
+              </div>
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-1.5 text-emerald-400 text-sm font-bold group-hover:translate-x-1 transition-transform">
+            View Live Online Users
+            <ArrowRight className="w-4 h-4" />
+          </div>
+        </div>
+      </button>
+
+      {/* ── Primary KPI Grid (online count card removed) ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard
-          icon={
-            <span className="relative flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" />
-              <span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-emerald-400" />
-            </span>
-          }
-          label="Scholars Online Now"
-          value={onlineCount ?? "—"}
-          sub="Active in last 90 seconds"
-          subColor="text-emerald-400"
-          valueColor="text-emerald-400"
-          loading={onlineCount === null}
-        />
         <KpiCard
           icon={<Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />}
           label="Total Students"
           value={kpis.totalUsers}
           sub={`+${kpis.newSignups7d || 0} this week`}
           subColor="text-emerald-400"
+          accent="indigo"
           loading={loading}
           onClick={() => go("users")}
         />
@@ -247,6 +281,7 @@ export default function DashboardView({ onNavigate }) {
           sub={`${kpis.premiumConversionRate || 0}% conversion rate`}
           subColor="text-amber-400"
           valueColor="text-amber-400"
+          accent="amber"
           loading={loading}
           onClick={() => go("premium")}
         />
@@ -255,6 +290,7 @@ export default function DashboardView({ onNavigate }) {
           label="Total Attempts"
           value={kpis.totalActivityAttempts}
           sub={`${(kpis.totalExamAttempts || 0).toLocaleString()} exams · ${(kpis.totalTestAttempts || 0).toLocaleString()} practice`}
+          accent="blue"
           loading={loading}
           onClick={() => go("analytics")}
         />
@@ -265,6 +301,7 @@ export default function DashboardView({ onNavigate }) {
           label="Questions in Bank"
           value={kpis.totalQuestions}
           sub="Across all universities"
+          accent="purple"
           loading={loading}
           onClick={() => go("questions")}
           valueColor="text-purple-400"
@@ -280,6 +317,7 @@ export default function DashboardView({ onNavigate }) {
           sub={`${kpis.referralConversionRate || 0}% validated`}
           subColor="text-cyan-400"
           valueColor="text-cyan-400"
+          accent="cyan"
           loading={loading}
           onClick={() => go("referrals")}
         />
@@ -288,6 +326,7 @@ export default function DashboardView({ onNavigate }) {
           label="Available Codes"
           value={kpis.availableCodes}
           sub={`${kpis.redeemedCodes || 0} redeemed · ${kpis.codeRedemptionRate || 0}% redemption`}
+          accent="emerald"
           loading={loading}
           onClick={() => go("premium")}
           valueColor={
@@ -299,6 +338,7 @@ export default function DashboardView({ onNavigate }) {
           label="Push Subscribers"
           value={kpis.totalPushSubs}
           sub={`${kpis.onboardingReminders || 0} onboarding reminders sent`}
+          accent="indigo"
           loading={loading}
           onClick={() => go("notifications")}
         />
@@ -309,6 +349,7 @@ export default function DashboardView({ onNavigate }) {
           label="Pending Moderation"
           value={kpis.pendingReviews}
           sub="Reviews awaiting approval"
+          accent="orange"
           loading={loading}
           onClick={() => go("reviews")}
           valueColor={
@@ -324,6 +365,7 @@ export default function DashboardView({ onNavigate }) {
           label="Reports Pending"
           value={messagingStats.pending_reports}
           sub="Safety reports awaiting action"
+          accent="rose"
           loading={loading}
           onClick={() => go("reports")}
           valueColor={
@@ -337,6 +379,7 @@ export default function DashboardView({ onNavigate }) {
           label="Active Connections"
           value={messagingStats.total_connections}
           sub="Scholars chatting & connecting"
+          accent="indigo"
           loading={loading}
           onClick={() => go("reports")}
           valueColor="text-indigo-400"
@@ -348,6 +391,7 @@ export default function DashboardView({ onNavigate }) {
           label="Messages Today"
           value={messagingStats.messages_today}
           sub="Direct peer discussions"
+          accent="emerald"
           loading={loading}
           onClick={() => go("reports")}
           valueColor="text-emerald-400"
@@ -356,8 +400,8 @@ export default function DashboardView({ onNavigate }) {
 
       {/* ── Main Content Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Signups Feed */}
-        <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg">
+        {/* Recent Signups Feed + Trend Chart */}
+        <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg flex flex-col">
           <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-emerald-400" />
@@ -370,6 +414,77 @@ export default function DashboardView({ onNavigate }) {
               All Users <ArrowRight className="w-3 h-3" />
             </button>
           </div>
+
+          {/* Trend chart */}
+          <div className="px-5 pt-4 pb-2">
+            {loading ? (
+              <div className="h-24 bg-slate-800/50 rounded-xl animate-pulse" />
+            ) : overview?.signupsTrend?.length > 0 ? (
+              <div className="h-24">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={overview.signupsTrend}
+                    margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id="signupGrad"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#6366f1"
+                          stopOpacity={0.35}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#6366f1"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 9, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 9, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#0f172a",
+                        border: "1px solid #1e293b",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                        color: "#e2e8f0",
+                      }}
+                      itemStyle={{ color: "#818cf8" }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="count"
+                      stroke="#6366f1"
+                      strokeWidth={2}
+                      fill="url(#signupGrad)"
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-16 flex items-center justify-center text-[11px] text-slate-600 border border-dashed border-slate-800 rounded-xl">
+                Signup trend data unavailable
+              </div>
+            )}
+          </div>
+
           {loading ? (
             <LoadingRows count={5} />
           ) : recentSignups.length === 0 ? (
@@ -464,7 +579,7 @@ export default function DashboardView({ onNavigate }) {
             </div>
           </div>
 
-          {/* Match Activity */}
+          {/* Activity Breakdown */}
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg p-5 space-y-3">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <Activity className="w-4 h-4 text-blue-400" />
@@ -733,6 +848,17 @@ export default function DashboardView({ onNavigate }) {
 
 /* ── Sub-components ── */
 
+const ACCENT_BORDER = {
+  indigo: "hover:border-indigo-700/60",
+  amber: "hover:border-amber-700/60",
+  blue: "hover:border-blue-700/60",
+  purple: "hover:border-purple-700/60",
+  cyan: "hover:border-cyan-700/60",
+  emerald: "hover:border-emerald-700/60",
+  orange: "hover:border-orange-700/60",
+  rose: "hover:border-rose-700/60",
+};
+
 function KpiCard({
   icon,
   label,
@@ -740,13 +866,15 @@ function KpiCard({
   sub,
   subColor = "text-slate-400",
   valueColor = "text-white",
+  accent,
   loading,
   onClick,
 }) {
+  const accentBorder = (accent && ACCENT_BORDER[accent]) || "";
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-slate-900/80 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-lg hover:border-slate-700 hover:bg-slate-900 transition group space-y-2"
+      className={`w-full text-left bg-slate-900/80 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-lg hover:bg-slate-900 transition group space-y-2 ${accentBorder}`}
     >
       <div className="flex items-center justify-between text-slate-400">
         <span className="text-[10px] font-bold uppercase tracking-wider">

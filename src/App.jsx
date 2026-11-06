@@ -24,6 +24,7 @@ import AnalyticsView from "./components/AnalyticsView";
 import NotificationsView from "./components/NotificationsView";
 import ContentCmsView from "./components/ContentCmsView";
 import AdminUsersView from "./components/AdminUsersView";
+import OnlineView from "./components/OnlineView";
 import AuditLogView from "./components/AuditLogView";
 import AdsView from "./components/AdsView";
 import { RefreshCw, Menu } from "lucide-react";
@@ -140,6 +141,7 @@ function AdminShell({ adminRecord, onLogout }) {
             <Route path="/cms" element={<ContentCmsView />} />
             <Route path="/admins" element={<AdminUsersView />} />
             <Route path="/audit" element={<AuditLogView />} />
+            <Route path="/online" element={<OnlineView />} />
             {/* Catch-all → dashboard */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
