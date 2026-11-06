@@ -32,10 +32,43 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  CartesianGrid,
 } from "recharts";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
+
+/* ── Avatar helpers ── */
+const AVATAR_COLORS = [
+  "bg-indigo-900 text-indigo-300",
+  "bg-violet-900 text-violet-300",
+  "bg-cyan-900 text-cyan-300",
+  "bg-emerald-900 text-emerald-300",
+  "bg-amber-900 text-amber-300",
+  "bg-rose-900 text-rose-300",
+];
+const avatarColor = (str = "") => {
+  let h = 0;
+  for (let c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+};
+
+/* ── Level label helper ── */
+const LEVEL_LABELS = { 1: "100L", 2: "200L", 3: "300L", 4: "400L" };
+const levelLabel = (year) => LEVEL_LABELS[Number(year)] || null;
+
+/* ── timeAgo helper ── */
+function timeAgo(dateStr) {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr);
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${days}d ago`;
+}
 
 export default function DashboardView({ onNavigate }) {
   const navigate = useNavigate();
@@ -49,23 +82,26 @@ export default function DashboardView({ onNavigate }) {
     reports_this_week: 0,
   });
   const [loading, setLoading] = useState(true);
+  // onlineCount is fetched via the backend API (service role bypasses RLS)
   const [onlineCount, setOnlineCount] = useState(null);
 
-  // Poll platform-wide online count (users active in last 90s)
-  const fetchOnlineCount = async () => {
-    try {
-      const threshold = new Date(Date.now() - 90_000).toISOString();
-      const { count } = await supabase
-        .from("user_presence")
-        .select("*", { count: "exact", head: true })
-        .gte("last_seen", threshold);
-      if (typeof count === "number") setOnlineCount(count);
-    } catch (err) {
-      console.warn("Could not fetch online count:", err);
-    }
-  };
-
   useEffect(() => {
+    // Poll online count every 30s via the backend
+    const fetchOnlineCount = async () => {
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const token = session?.session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/admin/online`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          setOnlineCount(json.count ?? 0);
+        }
+      } catch (err) {
+        console.warn("Could not fetch online count:", err);
+      }
+    };
     fetchOnlineCount();
     const interval = setInterval(fetchOnlineCount, 30_000);
     return () => clearInterval(interval);
@@ -81,7 +117,6 @@ export default function DashboardView({ onNavigate }) {
       });
       if (res.ok) setStats(await res.json());
 
-      // Load messaging & moderation stats
       try {
         const { data: rpcStats } = await supabase.rpc("get_messaging_stats");
         if (rpcStats) {
@@ -129,10 +164,11 @@ export default function DashboardView({ onNavigate }) {
   }, []);
 
   const kpis = stats?.kpis || {};
-  const overview = stats?.overview || {};
   const needsAttention = stats?.needsAttention || {};
   const recentSignups = stats?.recentSignups || [];
   const recentAuditLogs = stats?.recentAuditLogs || [];
+  // signupsTrend and onlineCount now come directly from the dashboard endpoint
+  const signupsTrend = stats?.signupsTrend || [];
 
   const now = new Date();
   const greeting =
@@ -142,270 +178,258 @@ export default function DashboardView({ onNavigate }) {
         ? "Good afternoon"
         : "Good evening";
 
+  const dateLabel = now.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  /* Activity breakdown max for bar scaling */
+  const examAtt = kpis.totalExamAttempts || 0;
+  const practiceAtt = kpis.totalTestAttempts || 0;
+  const matchAtt = kpis.totalMatchAttempts || 0;
+  const activityMax = Math.max(examAtt, practiceAtt, matchAtt, 1);
+
   return (
     <div className="p-4 sm:p-6 space-y-6 text-slate-100">
-      {/* ── Hero Banner ── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-900/50 rounded-2xl p-5 sm:p-6 shadow-2xl">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(99,102,241,0.15),transparent_60%)] pointer-events-none" />
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p className="text-indigo-400 text-xs font-semibold uppercase tracking-widest mb-1">
-              {greeting} 👋
-            </p>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-              QuizBolt Admin Command Centre
-              <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
-            </h1>
-            <p className="text-slate-400 text-xs mt-1">
-              Platform overview ·{" "}
-              {new Date().toLocaleDateString("en-GB", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={loadStats}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition disabled:opacity-50 border border-slate-700"
-            >
-              <RefreshCw
-                className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
-              />{" "}
-              Refresh
-            </button>
-            <button
-              onClick={() => go("questions")}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition"
-            >
-              <HelpCircle className="w-3.5 h-3.5" /> Question Bank
-            </button>
-            <button
-              onClick={() => go("analytics")}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-bold transition"
-            >
-              <BarChart3 className="w-3.5 h-3.5" /> Analytics
-            </button>
-          </div>
+      {/* ── 1. Header Row ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black text-white tracking-tight">
+            Admin Dashboard
+          </h1>
+          <p className="text-slate-400 text-sm mt-0.5">
+            {greeting} · {dateLabel}
+          </p>
         </div>
-
-        {/* Inline pulse indicators — online count pill removed */}
-        {!loading && kpis.newSignups24h > 0 && (
-          <div className="relative mt-4 flex flex-wrap gap-3">
-            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              {kpis.newSignups24h} new student
-              {kpis.newSignups24h !== 1 ? "s" : ""} in last 24h
-            </div>
-            {kpis.pendingReviews > 0 && (
-              <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                {kpis.pendingReviews} review
-                {kpis.pendingReviews !== 1 ? "s" : ""} awaiting moderation
-              </div>
-            )}
-            {kpis.availableCodes < 5 && kpis.availableCodes >= 0 && (
-              <div className="flex items-center gap-1.5 text-[11px] text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
-                Low code stock: {kpis.availableCodes} unused codes remaining
-              </div>
-            )}
-          </div>
-        )}
+        <button
+          onClick={loadStats}
+          disabled={loading}
+          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </button>
       </div>
 
-      {/* ── Scholars Online Now — Dedicated Banner ── */}
+      {/* ── 2. Live Online Banner ── */}
       <button
         onClick={() => go("online")}
-        className="w-full relative overflow-hidden bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/60 border border-emerald-700/40 rounded-2xl px-5 py-4 shadow-lg hover:border-emerald-500/60 hover:shadow-emerald-900/30 hover:shadow-xl transition-all group text-left"
+        className="w-full bg-slate-900 border border-emerald-800/40 rounded-2xl px-5 py-3.5 hover:border-emerald-500/60 transition-all group text-left"
       >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(52,211,153,0.07),transparent_60%)] pointer-events-none" />
-        <div className="relative flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {/* Pulse dot */}
-            <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 shrink-0">
-              <span className="animate-ping absolute inline-flex h-5 w-5 rounded-full bg-emerald-400 opacity-30" />
-              <Wifi className="relative w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
-                  Live Now
-                </span>
-              </div>
-              <div className="text-white font-black text-xl sm:text-2xl leading-tight mt-0.5">
-                {onlineCount === null ? (
-                  <span className="text-slate-600 text-lg">Loading…</span>
-                ) : (
-                  <>
-                    {onlineCount.toLocaleString()}{" "}
-                    <span className="text-emerald-400">
-                      Scholar{onlineCount !== 1 ? "s" : ""}
-                    </span>{" "}
-                    Online Now
-                  </>
-                )}
-              </div>
-              <div className="text-slate-400 text-xs mt-0.5">
-                Active in the last 90 seconds across all universities
-              </div>
-            </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400" />
+            </span>
+            <span className="text-sm font-bold text-slate-100">
+              {onlineCount === null ? (
+                <span className="text-slate-500">Loading…</span>
+              ) : (
+                <>
+                  <span className="text-emerald-400 font-black">
+                    {onlineCount}
+                  </span>{" "}
+                  Scholar{onlineCount !== 1 ? "s" : ""} Online Now
+                </>
+              )}
+            </span>
           </div>
-          <div className="shrink-0 flex items-center gap-1.5 text-emerald-400 text-sm font-bold group-hover:translate-x-1 transition-transform">
-            View Live Online Users
-            <ArrowRight className="w-4 h-4" />
-          </div>
+          <span className="shrink-0 flex items-center gap-1 text-emerald-400 text-xs font-bold group-hover:translate-x-0.5 transition-transform">
+            View Live <ArrowRight className="w-3.5 h-3.5" />
+          </span>
         </div>
       </button>
 
-      {/* ── Primary KPI Grid (online count card removed) ── */}
+      {/* ── 3. Alert Pills Row ── */}
+      {(kpis.pendingReviews > 0 ||
+        kpis.availableCodes < 5 ||
+        kpis.newSignups24h > 0) && (
+        <div className="flex flex-wrap gap-2">
+          {kpis.pendingReviews > 0 && (
+            <button
+              onClick={() => go("reviews")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full text-xs font-bold hover:bg-amber-500/20 transition"
+            >
+              <AlertTriangle className="w-3 h-3" />
+              {kpis.pendingReviews} pending review
+              {kpis.pendingReviews !== 1 ? "s" : ""}
+            </button>
+          )}
+          {kpis.availableCodes < 5 && (
+            <button
+              onClick={() => go("premium")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-full text-xs font-bold hover:bg-rose-500/20 transition"
+            >
+              <Package className="w-3 h-3" />
+              Only {kpis.availableCodes ?? 0} codes left
+            </button>
+          )}
+          {kpis.newSignups24h > 0 && (
+            <button
+              onClick={() => go("users")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full text-xs font-bold hover:bg-emerald-500/20 transition"
+            >
+              <UserCheck className="w-3 h-3" />+{kpis.newSignups24h} new today
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── 4. Primary KPI Grid ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard
-          icon={<Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />}
+          icon={Users}
+          iconBg="bg-indigo-500/15"
+          iconColor="text-indigo-400"
           label="Total Students"
           value={kpis.totalUsers}
           sub={`+${kpis.newSignups7d || 0} this week`}
-          subColor="text-emerald-400"
-          accent="indigo"
           loading={loading}
           onClick={() => go("users")}
         />
         <KpiCard
-          icon={<Crown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />}
+          icon={Crown}
+          iconBg="bg-amber-500/15"
+          iconColor="text-amber-400"
           label="Premium Users"
           value={kpis.premiumUsers}
-          sub={`${kpis.premiumConversionRate || 0}% conversion rate`}
-          subColor="text-amber-400"
+          sub={`${kpis.premiumConversionRate || 0}% conversion`}
           valueColor="text-amber-400"
-          accent="amber"
           loading={loading}
           onClick={() => go("premium")}
         />
         <KpiCard
-          icon={<Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />}
+          icon={Activity}
+          iconBg="bg-blue-500/15"
+          iconColor="text-blue-400"
           label="Total Attempts"
           value={kpis.totalActivityAttempts}
-          sub={`${(kpis.totalExamAttempts || 0).toLocaleString()} exams · ${(kpis.totalTestAttempts || 0).toLocaleString()} practice`}
-          accent="blue"
+          sub={`${(kpis.totalExamAttempts || 0).toLocaleString()} exams`}
           loading={loading}
           onClick={() => go("analytics")}
         />
         <KpiCard
-          icon={
-            <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
-          }
+          icon={HelpCircle}
+          iconBg="bg-purple-500/15"
+          iconColor="text-purple-400"
           label="Questions in Bank"
           value={kpis.totalQuestions}
           sub="Across all universities"
-          accent="purple"
+          valueColor="text-purple-400"
           loading={loading}
           onClick={() => go("questions")}
-          valueColor="text-purple-400"
         />
       </div>
 
-      {/* ── Secondary KPI Grid ── */}
+      {/* ── 5. Secondary KPI Grid ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard
-          icon={<Share2 className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />}
-          label="Referral Signups"
-          value={kpis.totalReferrals}
-          sub={`${kpis.referralConversionRate || 0}% validated`}
-          subColor="text-cyan-400"
-          valueColor="text-cyan-400"
-          accent="cyan"
-          loading={loading}
-          onClick={() => go("referrals")}
-        />
-        <KpiCard
-          icon={<Package className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />}
+          icon={Package}
+          iconBg={
+            kpis.availableCodes < 5 ? "bg-rose-500/15" : "bg-emerald-500/15"
+          }
+          iconColor={
+            kpis.availableCodes < 5 ? "text-rose-400" : "text-emerald-400"
+          }
           label="Available Codes"
           value={kpis.availableCodes}
-          sub={`${kpis.redeemedCodes || 0} redeemed · ${kpis.codeRedemptionRate || 0}% redemption`}
-          accent="emerald"
-          loading={loading}
-          onClick={() => go("premium")}
+          sub={`${kpis.redeemedCodes || 0} redeemed`}
           valueColor={
             kpis.availableCodes < 5 ? "text-rose-400" : "text-emerald-400"
           }
+          loading={loading}
+          onClick={() => go("premium")}
         />
         <KpiCard
-          icon={<Bell className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />}
+          icon={Bell}
+          iconBg="bg-indigo-500/15"
+          iconColor="text-indigo-400"
           label="Push Subscribers"
           value={kpis.totalPushSubs}
-          sub={`${kpis.onboardingReminders || 0} onboarding reminders sent`}
-          accent="indigo"
+          sub={`${kpis.onboardingReminders || 0} reminders sent`}
           loading={loading}
           onClick={() => go("notifications")}
         />
         <KpiCard
-          icon={
-            <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
-          }
+          icon={Share2}
+          iconBg="bg-cyan-500/15"
+          iconColor="text-cyan-400"
+          label="Referral Signups"
+          value={kpis.totalReferrals}
+          sub={`${kpis.referralConversionRate || 0}% validated`}
+          valueColor="text-cyan-400"
+          loading={loading}
+          onClick={() => go("referrals")}
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          iconBg="bg-orange-500/15"
+          iconColor="text-orange-400"
           label="Pending Moderation"
           value={kpis.pendingReviews}
           sub="Reviews awaiting approval"
-          accent="orange"
-          loading={loading}
-          onClick={() => go("reviews")}
           valueColor={
             kpis.pendingReviews > 0 ? "text-orange-400" : "text-emerald-400"
           }
+          loading={loading}
+          onClick={() => go("reviews")}
         />
       </div>
 
-      {/* ── Messaging & Moderation Grid ── */}
+      {/* ── 6. Messaging Row ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <KpiCard
-          icon={<Flag className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />}
+          icon={Flag}
+          iconBg="bg-rose-500/15"
+          iconColor="text-rose-400"
           label="Reports Pending"
           value={messagingStats.pending_reports}
           sub="Safety reports awaiting action"
-          accent="rose"
-          loading={loading}
-          onClick={() => go("reports")}
           valueColor={
             messagingStats.pending_reports > 0
               ? "text-rose-400"
               : "text-emerald-400"
           }
+          loading={loading}
+          onClick={() => go("reports")}
         />
         <KpiCard
-          icon={<Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />}
+          icon={Wifi}
+          iconBg="bg-indigo-500/15"
+          iconColor="text-indigo-400"
           label="Active Connections"
           value={messagingStats.total_connections}
           sub="Scholars chatting & connecting"
-          accent="indigo"
+          valueColor="text-indigo-400"
           loading={loading}
           onClick={() => go("reports")}
-          valueColor="text-indigo-400"
         />
         <KpiCard
-          icon={
-            <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
-          }
+          icon={MessageSquare}
+          iconBg="bg-emerald-500/15"
+          iconColor="text-emerald-400"
           label="Messages Today"
           value={messagingStats.messages_today}
           sub="Direct peer discussions"
-          accent="emerald"
+          valueColor="text-emerald-400"
           loading={loading}
           onClick={() => go("reports")}
-          valueColor="text-emerald-400"
         />
       </div>
 
-      {/* ── Main Content Grid ── */}
+      {/* ── 7. Main 2-column grid: Recent Signups (left) + Signup Trend chart (right) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Signups Feed + Trend Chart */}
-        <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg flex flex-col">
+        {/* LEFT (2/3): Recent Signups table */}
+        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-emerald-400" />
-              Recent Student Signups
+              Recent Signups
             </h2>
             <button
               onClick={() => go("users")}
@@ -414,211 +438,188 @@ export default function DashboardView({ onNavigate }) {
               All Users <ArrowRight className="w-3 h-3" />
             </button>
           </div>
-
-          {/* Trend chart */}
-          <div className="px-5 pt-4 pb-2">
-            {loading ? (
-              <div className="h-24 bg-slate-800/50 rounded-xl animate-pulse" />
-            ) : overview?.signupsTrend?.length > 0 ? (
-              <div className="h-24">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={overview.signupsTrend}
-                    margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="signupGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="#6366f1"
-                          stopOpacity={0.35}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="#6366f1"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 9, fill: "#64748b" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 9, fill: "#64748b" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "#0f172a",
-                        border: "1px solid #1e293b",
-                        borderRadius: "8px",
-                        fontSize: "11px",
-                        color: "#e2e8f0",
-                      }}
-                      itemStyle={{ color: "#818cf8" }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="count"
-                      stroke="#6366f1"
-                      strokeWidth={2}
-                      fill="url(#signupGrad)"
-                      dot={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-16 flex items-center justify-center text-[11px] text-slate-600 border border-dashed border-slate-800 rounded-xl">
-                Signup trend data unavailable
-              </div>
-            )}
-          </div>
-
           {loading ? (
             <LoadingRows count={5} />
           ) : recentSignups.length === 0 ? (
             <EmptyState text="No signups yet." />
           ) : (
-            <div className="divide-y divide-slate-800/60">
-              {recentSignups.map((s) => (
-                <div
-                  key={s.id}
-                  className="px-5 py-3 flex items-center justify-between hover:bg-slate-800/30 transition"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-black text-indigo-400">
-                        {(s.full_name || s.user_name || "?")[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-white truncate">
-                        {s.full_name || s.user_name || "Unknown"}
-                      </div>
-                      <div className="text-[10px] text-indigo-300 truncate">
-                        {s.university || "—"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-3">
-                    {s.is_premium && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded text-[9px] font-bold">
-                        <Crown className="w-2.5 h-2.5" /> PRO
-                      </span>
-                    )}
-                    <span className="text-[10px] text-slate-500">
-                      {timeAgo(s.created_at)}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-500 uppercase font-semibold text-[10px]">
+                    <th className="py-3 px-5">Student</th>
+                    <th className="py-3 px-3 hidden sm:table-cell">
+                      University
+                    </th>
+                    <th className="py-3 px-3">Level</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3">Joined</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {recentSignups.map((s) => {
+                    const displayName = s.full_name || s.user_name || "Unknown";
+                    const initials = displayName
+                      .split(" ")
+                      .map((w) => w[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
+                    const colorClass = avatarColor(displayName);
+                    const lvl = levelLabel(s.year);
+                    return (
+                      <tr
+                        key={s.id}
+                        className="hover:bg-slate-800/30 transition"
+                      >
+                        <td className="py-3 px-5">
+                          <div className="flex items-center gap-2.5">
+                            {s.avatar_url ? (
+                              <img
+                                src={s.avatar_url}
+                                alt={displayName}
+                                className="w-8 h-8 rounded-full object-cover border border-slate-700 shrink-0"
+                              />
+                            ) : (
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-[11px] font-black ${colorClass}`}
+                              >
+                                {initials}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="font-bold text-white truncate max-w-[120px]">
+                                {displayName}
+                              </div>
+                              {s.user_name && s.full_name && (
+                                <div className="text-[10px] text-slate-500 truncate max-w-[120px]">
+                                  @{s.user_name}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 hidden sm:table-cell">
+                          {s.university ? (
+                            <span className="px-2 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-md text-[10px] font-semibold truncate max-w-[100px] inline-block">
+                              {s.university}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          {lvl ? (
+                            <span className="px-2 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 rounded text-[10px] font-bold">
+                              {lvl}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          {s.is_premium ? (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded text-[9px] font-bold">
+                              <Crown className="w-2.5 h-2.5" /> PRO
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-slate-500 rounded text-[9px] font-bold">
+                              FREE
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                          {timeAgo(s.created_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
 
-        {/* Platform Health Sidebar */}
-        <div className="space-y-4">
-          {/* Onboarding Health */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg p-5 space-y-3">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <Zap className="w-4 h-4 text-yellow-400" />
-              Onboarding Health
-            </h2>
-            <HealthRow
-              label="30-Day Signups"
-              value={`+${kpis.newSignups30d || 0}`}
-              color="text-emerald-400"
-              loading={loading}
-            />
-            <HealthRow
-              label="7-Day Signups"
-              value={`+${kpis.newSignups7d || 0}`}
-              color="text-emerald-400"
-              loading={loading}
-            />
-            <HealthRow
-              label="24h Signups"
-              value={`+${kpis.newSignups24h || 0}`}
-              color="text-cyan-400"
-              loading={loading}
-            />
-            <HealthRow
-              label="Incomplete Onboarding"
-              value={kpis.incompleteOnboarding || 0}
-              color={
-                kpis.incompleteOnboarding > 0
-                  ? "text-amber-400"
-                  : "text-slate-500"
-              }
-              loading={loading}
-            />
-            <HealthRow
-              label="Reminders Sent"
-              value={kpis.onboardingReminders || 0}
-              color="text-purple-400"
-              loading={loading}
-            />
-            <div className="pt-2 border-t border-slate-800">
-              <button
-                onClick={() => go("notifications")}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1"
+        {/* RIGHT (1/3): Signup Trend AreaChart */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+            Signup Trend
+          </p>
+          {loading ? (
+            <div className="flex-1 min-h-[220px] bg-slate-800/40 rounded-xl animate-pulse" />
+          ) : signupsTrend.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart
+                data={signupsTrend}
+                margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
               >
-                View Onboarding Details <ArrowRight className="w-3 h-3" />
-              </button>
+                <defs>
+                  <linearGradient id="signupGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#1e293b"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: "#64748b" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) =>
+                    new Date(v).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })
+                  }
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "#64748b" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "#1e293b",
+                    border: "1px solid #334155",
+                    borderRadius: "8px",
+                    fontSize: "11px",
+                    color: "#e2e8f0",
+                  }}
+                  itemStyle={{ color: "#818cf8" }}
+                  cursor={{ stroke: "#334155", strokeWidth: 1 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#818cf8"
+                  strokeWidth={2}
+                  fill="url(#signupGrad)"
+                  dot={false}
+                  activeDot={{
+                    r: 4,
+                    fill: "#818cf8",
+                    stroke: "#1e293b",
+                    strokeWidth: 2,
+                  }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex-1 min-h-[220px] flex items-center justify-center text-[11px] text-slate-600 border border-dashed border-slate-800 rounded-xl">
+              Signup trend data unavailable
             </div>
-          </div>
-
-          {/* Activity Breakdown */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg p-5 space-y-3">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <Activity className="w-4 h-4 text-blue-400" />
-              Activity Breakdown
-            </h2>
-            <HealthRow
-              label="Exam Attempts"
-              value={(kpis.totalExamAttempts || 0).toLocaleString()}
-              color="text-blue-400"
-              loading={loading}
-            />
-            <HealthRow
-              label="Practice Attempts"
-              value={(kpis.totalTestAttempts || 0).toLocaleString()}
-              color="text-indigo-400"
-              loading={loading}
-            />
-            <HealthRow
-              label="Match Attempts"
-              value={(kpis.totalMatchAttempts || 0).toLocaleString()}
-              color="text-purple-400"
-              loading={loading}
-            />
-            <div className="pt-2 border-t border-slate-800">
-              <button
-                onClick={() => go("analytics")}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1"
-              >
-                Full Analytics <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* ── Bottom Grid: Moderation + Universities + Audit + Quick Actions ── */}
+      {/* ── 8. Bottom grid: Moderation Queue (left) + Activity Breakdown (right) ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Needs Attention Queue */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg">
+        {/* Moderation Queue */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg">
           <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -673,8 +674,75 @@ export default function DashboardView({ onNavigate }) {
           )}
         </div>
 
-        {/* University Semesters */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg">
+        {/* Activity Breakdown — horizontal progress bars */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+          <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-5">
+            <Activity className="w-4 h-4 text-blue-400" />
+            Activity Breakdown
+          </h2>
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-1.5 animate-pulse">
+                  <div className="h-2.5 bg-slate-800 rounded w-1/3" />
+                  <div className="h-3 bg-slate-800 rounded-full w-full" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {[
+                {
+                  label: "Exam Attempts",
+                  value: examAtt,
+                  color: "bg-blue-500",
+                },
+                {
+                  label: "Practice Attempts",
+                  value: practiceAtt,
+                  color: "bg-indigo-500",
+                },
+                {
+                  label: "Match Attempts",
+                  value: matchAtt,
+                  color: "bg-purple-500",
+                },
+              ].map(({ label, value, color }) => {
+                const pct = Math.round((value / activityMax) * 100);
+                return (
+                  <div key={label}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-slate-400">{label}</span>
+                      <span className="text-xs font-bold text-slate-200">
+                        {value.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${color} transition-all duration-500`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="pt-4 mt-2 border-t border-slate-800">
+            <button
+              onClick={() => go("analytics")}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1"
+            >
+              Full Analytics <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 9. Bottom grid: Active Semesters (left) + Recent Audit Log (right) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Active Semesters */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg">
           <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <GraduationCap className="w-4 h-4 text-purple-400" />
@@ -714,12 +782,9 @@ export default function DashboardView({ onNavigate }) {
             <EmptyState text="No universities found." />
           )}
         </div>
-      </div>
 
-      {/* ── Recent Admin Activity + Quick Actions ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Recent Audit Log */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-lg">
           <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <Shield className="w-4 h-4 text-emerald-400" />
@@ -764,82 +829,82 @@ export default function DashboardView({ onNavigate }) {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Quick Actions */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-lg p-5 space-y-3">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              {
-                label: "Add Questions",
-                icon: HelpCircle,
-                tab: "questions",
-                color: "text-purple-400",
-                bg: "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20",
-              },
-              {
-                label: "Grant Premium",
-                icon: Crown,
-                tab: "premium",
-                color: "text-amber-400",
-                bg: "bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20",
-              },
-              {
-                label: "Moderate Reviews",
-                icon: FileText,
-                tab: "reviews",
-                color: "text-indigo-400",
-                bg: "bg-indigo-500/10 border-indigo-500/20 hover:bg-indigo-500/20",
-              },
-              {
-                label: "Push Notification",
-                icon: Bell,
-                tab: "notifications",
-                color: "text-cyan-400",
-                bg: "bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20",
-              },
-              {
-                label: "View Referrals",
-                icon: Share2,
-                tab: "referrals",
-                color: "text-rose-400",
-                bg: "bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/20",
-              },
-              {
-                label: "Manage Users",
-                icon: Users,
-                tab: "users",
-                color: "text-emerald-400",
-                bg: "bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20",
-              },
-              {
-                label: "Leaderboard",
-                icon: BarChart3,
-                tab: "leaderboard",
-                color: "text-blue-400",
-                bg: "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20",
-              },
-              {
-                label: "Audit Trail",
-                icon: Shield,
-                tab: "audit",
-                color: "text-slate-400",
-                bg: "bg-slate-700/50 border-slate-700 hover:bg-slate-700",
-              },
-            ].map(({ label, icon: Icon, tab, color, bg }) => (
-              <button
-                key={tab}
-                onClick={() => go(tab)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-bold transition ${bg} ${color}`}
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{label}</span>
-              </button>
-            ))}
-          </div>
+      {/* ── 10. Quick Actions ── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+          <Zap className="w-4 h-4 text-amber-400" />
+          Quick Actions
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            {
+              label: "Add Questions",
+              icon: HelpCircle,
+              tab: "questions",
+              color: "text-purple-400",
+              bg: "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20",
+            },
+            {
+              label: "Grant Premium",
+              icon: Crown,
+              tab: "premium",
+              color: "text-amber-400",
+              bg: "bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20",
+            },
+            {
+              label: "Moderate Reviews",
+              icon: FileText,
+              tab: "reviews",
+              color: "text-indigo-400",
+              bg: "bg-indigo-500/10 border-indigo-500/20 hover:bg-indigo-500/20",
+            },
+            {
+              label: "Push Notification",
+              icon: Bell,
+              tab: "notifications",
+              color: "text-cyan-400",
+              bg: "bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20",
+            },
+            {
+              label: "View Referrals",
+              icon: Share2,
+              tab: "referrals",
+              color: "text-rose-400",
+              bg: "bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/20",
+            },
+            {
+              label: "Manage Users",
+              icon: Users,
+              tab: "users",
+              color: "text-emerald-400",
+              bg: "bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20",
+            },
+            {
+              label: "Leaderboard",
+              icon: BarChart3,
+              tab: "leaderboard",
+              color: "text-blue-400",
+              bg: "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20",
+            },
+            {
+              label: "Audit Trail",
+              icon: Shield,
+              tab: "audit",
+              color: "text-slate-400",
+              bg: "bg-slate-700/50 border-slate-700 hover:bg-slate-700",
+            },
+          ].map(({ label, icon: Icon, tab, color, bg }) => (
+            <button
+              key={tab}
+              onClick={() => go(tab)}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-bold transition ${bg} ${color}`}
+            >
+              <Icon className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -848,64 +913,49 @@ export default function DashboardView({ onNavigate }) {
 
 /* ── Sub-components ── */
 
-const ACCENT_BORDER = {
-  indigo: "hover:border-indigo-700/60",
-  amber: "hover:border-amber-700/60",
-  blue: "hover:border-blue-700/60",
-  purple: "hover:border-purple-700/60",
-  cyan: "hover:border-cyan-700/60",
-  emerald: "hover:border-emerald-700/60",
-  orange: "hover:border-orange-700/60",
-  rose: "hover:border-rose-700/60",
-};
-
 function KpiCard({
-  icon,
+  icon: Icon,
+  iconBg,
+  iconColor,
   label,
   value,
   sub,
-  subColor = "text-slate-400",
   valueColor = "text-white",
-  accent,
   loading,
   onClick,
 }) {
-  const accentBorder = (accent && ACCENT_BORDER[accent]) || "";
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left bg-slate-900/80 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-lg hover:bg-slate-900 transition group space-y-2 ${accentBorder}`}
+      className="w-full text-left bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl hover:bg-slate-800/60 transition group"
     >
-      <div className="flex items-center justify-between text-slate-400">
-        <span className="text-[10px] font-bold uppercase tracking-wider">
-          {label}
-        </span>
-        <div className="group-hover:scale-110 transition">{icon}</div>
-      </div>
-      <div className={`text-xl sm:text-2xl font-black ${valueColor}`}>
-        {loading ? (
-          <span className="text-slate-600">—</span>
-        ) : (
-          (value ?? 0).toLocaleString()
-        )}
-      </div>
-      <div
-        className={`text-[10px] sm:text-[11px] font-semibold ${subColor} leading-tight`}
-      >
-        {sub}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">
+            {label}
+          </p>
+          <div
+            className={`text-2xl sm:text-3xl font-black mt-1.5 ${valueColor}`}
+          >
+            {loading ? (
+              <span className="text-slate-700">—</span>
+            ) : typeof value === "number" ? (
+              value.toLocaleString()
+            ) : (
+              (value ?? 0)
+            )}
+          </div>
+          {sub && (
+            <p className="text-[11px] text-slate-500 mt-1 leading-tight">
+              {sub}
+            </p>
+          )}
+        </div>
+        <div className={`p-2.5 rounded-xl shrink-0 mt-0.5 ${iconBg}`}>
+          {Icon && <Icon className={`w-5 h-5 ${iconColor}`} />}
+        </div>
       </div>
     </button>
-  );
-}
-
-function HealthRow({ label, value, color, loading }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-slate-400 text-xs">{label}</span>
-      <span className={`text-sm font-bold ${color}`}>
-        {loading ? "—" : value}
-      </span>
-    </div>
   );
 }
 
@@ -932,16 +982,4 @@ function EmptyState({ text }) {
   return (
     <div className="px-5 py-8 text-center text-xs text-slate-500">{text}</div>
   );
-}
-
-function timeAgo(dateStr) {
-  if (!dateStr) return "—";
-  const diff = Date.now() - new Date(dateStr);
-  const mins = Math.floor(diff / 60000);
-  const hrs = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${days}d ago`;
 }

@@ -8,6 +8,7 @@ import {
   Clock,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { API_BASE_URL } from "../config/apiConfig";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -164,17 +165,14 @@ export default function OnlineView() {
     else if (presences.length === 0) setLoading(true);
 
     try {
-      const threshold = new Date(Date.now() - 90_000).toISOString();
-      const { data, error } = await supabase
-        .from("user_presence")
-        .select(
-          "user_id, last_seen, profiles(full_name, user_name, university, college, department, year, avatar_url, is_premium)",
-        )
-        .gte("last_seen", threshold)
-        .order("last_seen", { ascending: false });
-
-      if (!error && data) {
-        setPresences(data);
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/admin/online`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPresences(json.scholars || []);
       }
     } catch (err) {
       console.error("Error fetching online scholars:", err);
