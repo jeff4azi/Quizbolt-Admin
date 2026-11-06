@@ -48,6 +48,7 @@ export default function Sidebar({ adminRecord, onLogout, onClose }) {
     { id: "reports", label: "Reports & Moderation", icon: Flag },
     { id: "reviews", label: "Testimonials Moderation", icon: MessageSquare },
     // ── Communications ───────────────────────────────────────────────────
+    { id: "announcements", label: "Announcements", icon: Megaphone },
     { id: "notifications", label: "Push Notifications", icon: Bell },
     { id: "ads", label: "Ad Campaigns", icon: Megaphone },
     // ── Analytics & Insight ──────────────────────────────────────────────

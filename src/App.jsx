@@ -22,6 +22,7 @@ import ReferralsView from "./components/ReferralsView";
 import LeaderboardView from "./components/LeaderboardView";
 import AnalyticsView from "./components/AnalyticsView";
 import NotificationsView from "./components/NotificationsView";
+import AnnouncementsView from "./components/AnnouncementsView";
 import ContentCmsView from "./components/ContentCmsView";
 import AdminUsersView from "./components/AdminUsersView";
 import OnlineView from "./components/OnlineView";
@@ -137,6 +138,7 @@ function AdminShell({ adminRecord, onLogout }) {
             <Route path="/leaderboard" element={<LeaderboardView />} />
             <Route path="/analytics" element={<AnalyticsView />} />
             <Route path="/notifications" element={<NotificationsView />} />
+            <Route path="/announcements" element={<AnnouncementsView />} />
             <Route path="/ads" element={<AdsView />} />
             <Route path="/cms" element={<ContentCmsView />} />
             <Route path="/admins" element={<AdminUsersView />} />
