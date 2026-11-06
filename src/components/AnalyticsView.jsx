@@ -14,6 +14,18 @@ import {
   TrendingUp,
   Calendar,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import { API_BASE_URL } from "../config/apiConfig";
 import { supabase } from "../lib/supabaseClient";
 import { useUniversities } from "../hooks/useUniversitiesAndColleges";
@@ -49,142 +61,62 @@ function presetToDates(preset) {
   return { from_date: null, to_date: null }; // "all" or "custom"
 }
 
-// ---- Lightweight, dependency-free SVG charts -------------------------------
+// Shared tooltip style
+const TOOLTIP_STYLE = {
+  contentStyle: {
+    background: "#0f172a",
+    border: "1px solid #1e293b",
+    borderRadius: 8,
+    fontSize: 11,
+    color: "#e2e8f0",
+  },
+  cursor: { stroke: "#1e293b" },
+};
 
-function MiniBarChart({ data, valueKey, color = "#818cf8", height = 140 }) {
-  const values = data.map((d) => d[valueKey]);
-  const max = Math.max(1, ...values);
-  const width = 100; // percentage-based viewBox, scales via container width
-  const barGap = 0.4;
-  const barWidth = data.length > 0 ? width / data.length - barGap : 0;
+// X-axis date formatter
+const xDateFormatter = (v) =>
+  new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-  // Show at most ~6 x-axis labels regardless of range length
-  const labelEvery = Math.max(1, Math.ceil(data.length / 6));
+// ── KPI Card ──────────────────────────────────────────────────────────────────
 
-  return (
-    <div className="w-full">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="w-full"
-        style={{ height }}
-      >
-        {data.map((d, i) => {
-          const barHeight = (d[valueKey] / max) * (height - 20);
-          const x = i * (barWidth + barGap);
-          const y = height - 20 - barHeight;
-          return (
-            <rect
-              key={i}
-              x={x}
-              y={y}
-              width={Math.max(barWidth, 0.2)}
-              height={Math.max(barHeight, 0)}
-              fill={color}
-              rx="0.6"
-              opacity={0.9}
-            >
-              <title>{`${d.date}: ${d[valueKey]}`}</title>
-            </rect>
-          );
-        })}
-      </svg>
-      <div className="flex justify-between text-[9px] text-slate-500 mt-1 px-0.5">
-        {data.map((d, i) =>
-          i % labelEvery === 0 ? (
-            <span key={i} style={{ flex: 1, textAlign: "center" }}>
-              {new Date(d.date).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-          ) : null,
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MiniDualLineChart({
-  data,
-  seriesA,
-  seriesB,
-  colorA = "#818cf8",
-  colorB = "#c084fc",
-  height = 140,
+function KpiCard({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  label,
+  value,
+  sub,
+  valueColor = "text-white",
 }) {
-  const width = 100;
-  const allValues = data.flatMap((d) => [d[seriesA], d[seriesB]]);
-  const max = Math.max(1, ...allValues);
-  const stepX = data.length > 1 ? width / (data.length - 1) : width;
-
-  const toPoints = (key) =>
-    data
-      .map((d, i) => {
-        const x = i * stepX;
-        const y = height - 20 - (d[key] / max) * (height - 20);
-        return `${x},${y}`;
-      })
-      .join(" ");
-
-  const labelEvery = Math.max(1, Math.ceil(data.length / 6));
-
   return (
-    <div className="w-full">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="w-full"
-        style={{ height }}
-      >
-        <polyline
-          points={toPoints(seriesA)}
-          fill="none"
-          stroke={colorA}
-          strokeWidth="0.7"
-          vectorEffect="non-scaling-stroke"
-        />
-        <polyline
-          points={toPoints(seriesB)}
-          fill="none"
-          stroke={colorB}
-          strokeWidth="0.7"
-          vectorEffect="non-scaling-stroke"
-          strokeDasharray="2,1.2"
-        />
-      </svg>
-      <div className="flex justify-between text-[9px] text-slate-500 mt-1 px-0.5">
-        {data.map((d, i) =>
-          i % labelEvery === 0 ? (
-            <span key={i} style={{ flex: 1, textAlign: "center" }}>
-              {new Date(d.date).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-          ) : null,
+    <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            {label}
+          </p>
+          <div className={`text-2xl sm:text-3xl font-black mt-1 ${valueColor}`}>
+            {value}
+          </div>
+          {sub && (
+            <p className="text-[11px] text-slate-500 mt-1 leading-tight">
+              {sub}
+            </p>
+          )}
+        </div>
+        {Icon && (
+          <div
+            className={`p-2.5 rounded-xl shrink-0 ${iconBg || "bg-slate-800"}`}
+          >
+            <Icon className={`w-5 h-5 ${iconColor || "text-slate-400"}`} />
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-// ---- Small presentational pieces -------------------------------------------
-
-function KpiCard({ icon: Icon, label, value, sub, accent = "text-white" }) {
-  return (
-    <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl">
-      <div className="flex items-center justify-between">
-        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-          {label}
-        </div>
-        {Icon && <Icon className="w-3.5 h-3.5 text-slate-600" />}
-      </div>
-      <div className={`text-2xl font-black mt-1 ${accent}`}>{value}</div>
-      {sub && <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function AnalyticsView() {
   const [data, setData] = useState(null);
@@ -295,6 +227,15 @@ export default function AnalyticsView() {
     return Math.max(1, ...counts);
   }, [overview]);
 
+  const totalLevelCount = useMemo(() => {
+    return (
+      (overview?.levelDistribution || []).reduce(
+        (acc, l) => acc + l.count,
+        0,
+      ) || 1
+    );
+  }, [overview]);
+
   /** Human-readable label for the active date window */
   const activeDateLabel = useMemo(() => {
     if (datePreset === "all") return "All Time";
@@ -312,19 +253,21 @@ export default function AnalyticsView() {
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="p-4 sm:p-6 space-y-6 text-slate-100">
-      {/* Page header */}
+      {/* ── Page Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-indigo-400" />
-            Analytics & Telemetry
-          </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            Aggregated server-side across every row in the database — nothing
-            here is capped by API row limits.
-          </p>
+        <div className="flex items-start gap-3">
+          <div className="w-1 self-stretch rounded-full bg-indigo-500 shrink-0" />
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              Analytics &amp; Telemetry
+            </h1>
+            <p className="text-slate-400 text-xs mt-1">
+              Aggregated server-side across every row in the database — nothing
+              here is capped by API row limits.
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={fetchAnalytics}
             className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition"
@@ -337,25 +280,26 @@ export default function AnalyticsView() {
           <button
             onClick={exportCsv}
             disabled={!data?.courseStatsList}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50"
           >
-            <Download className="w-4 h-4 text-slate-400" /> Export CSV
+            <Download className="w-3.5 h-3.5 text-slate-400" /> Export CSV
           </button>
         </div>
       </div>
 
-      {/* ── Unified Filter Bar ─────────────────────────────────────────────── */}
-      <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg space-y-3 text-xs">
-        <div className="flex flex-wrap items-center gap-4">
+      {/* ── Unified Filter Bar ── */}
+      <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-3 text-xs">
+        <div className="flex flex-wrap items-center gap-3">
           {/* University picker */}
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-semibold flex items-center gap-1.5 shrink-0">
-              <Filter className="w-4 h-4 text-indigo-400" /> University:
+              <Filter className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">University:</span>
             </span>
             <select
               value={universityFilter}
               onChange={(e) => setUniversityFilter(e.target.value)}
-              className="px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
             >
               <option value="">All Universities</option>
               {universities.map((u) => (
@@ -369,14 +313,15 @@ export default function AnalyticsView() {
           {/* Date preset buttons */}
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-semibold flex items-center gap-1.5 shrink-0">
-              <Calendar className="w-4 h-4 text-indigo-400" /> Period:
+              <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Period:</span>
             </span>
             <div className="flex rounded-xl overflow-hidden border border-slate-700">
               {DATE_PRESETS.map((p) => (
                 <button
                   key={p.key}
                   onClick={() => setDatePreset(p.key)}
-                  className={`px-3 py-2 font-bold transition ${
+                  className={`px-2.5 py-1.5 font-bold transition text-xs ${
                     datePreset === p.key
                       ? "bg-indigo-600 text-white"
                       : "bg-slate-800 text-slate-400 hover:bg-slate-700"
@@ -389,16 +334,16 @@ export default function AnalyticsView() {
           </div>
         </div>
 
-        {/* Custom date pickers — only visible when "Custom" is selected */}
+        {/* Custom date pickers */}
         {datePreset === "custom" && (
-          <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-800/60 border border-slate-700 rounded-xl">
+          <div className="flex flex-wrap items-center gap-2.5 p-3 bg-slate-800/60 border border-slate-700 rounded-xl">
             <span className="text-slate-400 font-semibold">From:</span>
             <input
               type="date"
               value={draftFrom}
               max={draftTo || undefined}
               onChange={(e) => setDraftFrom(e.target.value)}
-              className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
             />
             <span className="text-slate-400 font-semibold">To:</span>
             <input
@@ -406,19 +351,19 @@ export default function AnalyticsView() {
               value={draftTo}
               min={draftFrom || undefined}
               onChange={(e) => setDraftTo(e.target.value)}
-              className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
             />
             <button
               onClick={applyCustomDates}
               disabled={!draftFrom && !draftTo}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-bold transition"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-bold transition text-xs"
             >
               Apply
             </button>
             {(draftFrom || draftTo || customFrom || customTo) && (
               <button
                 onClick={clearCustomDates}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-bold transition"
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-bold transition text-xs"
               >
                 Clear
               </button>
@@ -426,7 +371,7 @@ export default function AnalyticsView() {
           </div>
         )}
 
-        {/* Active filter summary pill */}
+        {/* Active filter summary */}
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
           <span className="font-semibold text-slate-400">Viewing:</span>
           <span className="px-2 py-0.5 bg-indigo-900/50 border border-indigo-700/50 text-indigo-300 rounded-full font-bold">
@@ -454,144 +399,235 @@ export default function AnalyticsView() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* KPI Overview Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {/* ── KPI Overview Grid ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <KpiCard
               icon={Users}
+              iconBg="bg-slate-800"
+              iconColor="text-slate-400"
               label="Total Users"
               value={(overview?.totalUsers || 0).toLocaleString()}
             />
             <KpiCard
               icon={Crown}
+              iconBg="bg-amber-500/15"
+              iconColor="text-amber-400"
               label="Premium Users"
               value={(overview?.premiumUsers || 0).toLocaleString()}
               sub={`${overview?.premiumRate ?? 0}% of users`}
-              accent="text-amber-400"
+              valueColor="text-amber-400"
             />
             <KpiCard
               icon={CheckCircle2}
+              iconBg="bg-emerald-500/15"
+              iconColor="text-emerald-400"
               label="Onboarding Complete"
               value={`${overview?.onboardingRate ?? 0}%`}
               sub={`${(overview?.onboardedUsers || 0).toLocaleString()} users`}
-              accent="text-emerald-400"
+              valueColor="text-emerald-400"
             />
             <KpiCard
               icon={Target}
+              iconBg="bg-indigo-500/15"
+              iconColor="text-indigo-400"
               label="Overall Avg Score"
               value={`${overview?.overallAvgScore ?? 0}%`}
-              accent="text-indigo-400"
+              valueColor="text-indigo-400"
             />
             <KpiCard
               icon={BarChart3}
+              iconBg="bg-blue-500/15"
+              iconColor="text-blue-400"
               label="Exam Attempts"
               value={(data?.totalExamAttempts || 0).toLocaleString()}
             />
             <KpiCard
               icon={TrendingUp}
+              iconBg="bg-purple-500/15"
+              iconColor="text-purple-400"
               label="Practice Attempts"
               value={(data?.totalTestAttempts || 0).toLocaleString()}
-              accent="text-purple-400"
+              valueColor="text-purple-400"
             />
             <KpiCard
               icon={Flame}
+              iconBg="bg-orange-500/15"
+              iconColor="text-orange-400"
               label="7+ Day Streaks"
               value={(overview?.activeStreakUsers || 0).toLocaleString()}
               sub={`avg streak: ${overview?.avgCurrentStreak ?? 0} days`}
-              accent="text-orange-400"
+              valueColor="text-orange-400"
             />
             <KpiCard
               icon={Share2}
+              iconBg="bg-sky-500/15"
+              iconColor="text-sky-400"
               label="Referrals"
               value={(overview?.totalReferrals || 0).toLocaleString()}
               sub={`${(overview?.validatedReferrals || 0).toLocaleString()} validated`}
-              accent="text-sky-400"
+              valueColor="text-sky-400"
             />
           </div>
 
-          {/* Trend Charts */}
+          {/* ── Trend Charts ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="p-4 sm:p-5 bg-slate-900/80 border border-slate-800 rounded-2xl">
-              <div className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-indigo-400" /> New Signups (
-                {activeDateLabel})
+            {/* Signups Trend — BarChart */}
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl">
+              <div className="text-xs font-bold text-slate-300 mb-4 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-indigo-400" />
+                New Signups ({activeDateLabel})
               </div>
               {overview?.signupsTrend?.length ? (
-                <MiniBarChart
-                  data={overview.signupsTrend}
-                  valueKey="count"
-                  color="#818cf8"
-                />
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart
+                    data={overview.signupsTrend}
+                    margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#1e293b"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={xDateFormatter}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      {...TOOLTIP_STYLE}
+                      labelFormatter={xDateFormatter}
+                    />
+                    <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               ) : (
-                <div className="text-center text-slate-500 text-xs py-8">
+                <div className="h-[200px] flex items-center justify-center text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
                   No signup data for this range.
                 </div>
               )}
             </div>
 
-            <div className="p-4 sm:p-5 bg-slate-900/80 border border-slate-800 rounded-2xl">
-              <div className="text-xs font-bold text-slate-300 mb-3 flex items-center justify-between">
+            {/* Attempts Trend — LineChart */}
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl">
+              <div className="text-xs font-bold text-slate-300 mb-4 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />{" "}
+                  <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
                   Attempts Over Time ({activeDateLabel})
                 </span>
                 <span className="flex items-center gap-3 text-[10px] font-semibold normal-case">
                   <span className="flex items-center gap-1 text-indigo-300">
-                    <span className="w-2 h-0.5 bg-indigo-400 inline-block" />{" "}
+                    <span className="w-2 h-0.5 bg-indigo-400 inline-block rounded" />
                     Exam
                   </span>
                   <span className="flex items-center gap-1 text-purple-300">
                     <span
-                      className="w-2 h-0.5 bg-purple-400 inline-block"
+                      className="w-2 h-0.5 bg-purple-400 inline-block rounded"
                       style={{ borderTop: "1px dashed" }}
-                    />{" "}
+                    />
                     Practice
                   </span>
                 </span>
               </div>
               {overview?.attemptsTrend?.length ? (
-                <MiniDualLineChart
-                  data={overview.attemptsTrend}
-                  seriesA="exam_count"
-                  seriesB="test_count"
-                />
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart
+                    data={overview.attemptsTrend}
+                    margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#1e293b"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={xDateFormatter}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      {...TOOLTIP_STYLE}
+                      labelFormatter={xDateFormatter}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="exam_count"
+                      stroke="#6366f1"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                      name="Exam"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="test_count"
+                      stroke="#c084fc"
+                      strokeWidth={2}
+                      strokeDasharray="5 3"
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                      name="Practice"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               ) : (
-                <div className="text-center text-slate-500 text-xs py-8">
+                <div className="h-[200px] flex items-center justify-center text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
                   No attempt data for this range.
                 </div>
               )}
             </div>
           </div>
 
-          {/* Level Distribution + University Breakdown */}
+          {/* ── Level Distribution + University Breakdown ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="p-4 sm:p-5 bg-slate-900/80 border border-slate-800 rounded-2xl">
-              <div className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
-                <GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> Level
-                Distribution
+            {/* Level Distribution */}
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl">
+              <div className="text-xs font-bold text-slate-300 mb-4 flex items-center gap-1.5">
+                <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
+                Level Distribution
               </div>
               {overview?.levelDistribution?.length ? (
-                <div className="space-y-2.5">
-                  {overview.levelDistribution.map((l) => (
-                    <div
-                      key={l.year}
-                      className="flex items-center gap-3 text-xs"
-                    >
-                      <span className="w-16 shrink-0 font-semibold text-slate-400">
-                        {l.label}
-                      </span>
-                      <div className="flex-1 h-4 bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
-                          style={{
-                            width: `${(l.count / maxLevelCount) * 100}%`,
-                          }}
-                        />
+                <div className="space-y-3">
+                  {overview.levelDistribution.map((l) => {
+                    const pct = Math.round((l.count / totalLevelCount) * 100);
+                    return (
+                      <div
+                        key={l.year}
+                        className="flex items-center gap-3 text-xs"
+                      >
+                        <span className="w-16 shrink-0 font-semibold text-slate-400">
+                          {l.label}
+                        </span>
+                        <div className="flex-1 h-5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+                            style={{
+                              width: `${(l.count / maxLevelCount) * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="w-20 text-right font-bold text-white">
+                          {l.count.toLocaleString()}{" "}
+                          <span className="text-slate-500 font-normal">
+                            ({pct}%)
+                          </span>
+                        </span>
                       </div>
-                      <span className="w-12 text-right font-bold text-white">
-                        {l.count}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center text-slate-500 text-xs py-8">
@@ -600,10 +636,11 @@ export default function AnalyticsView() {
               )}
             </div>
 
-            <div className="p-4 sm:p-5 bg-slate-900/80 border border-slate-800 rounded-2xl">
-              <div className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
-                <BarChart3 className="w-3.5 h-3.5 text-indigo-400" /> University
-                Breakdown
+            {/* University Breakdown */}
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl">
+              <div className="text-xs font-bold text-slate-300 mb-4 flex items-center gap-1.5">
+                <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                University Breakdown
               </div>
               {universityFilter ? (
                 <div className="text-center text-slate-500 text-xs py-8">
@@ -614,26 +651,29 @@ export default function AnalyticsView() {
                 <div className="overflow-x-auto -mx-1">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="text-slate-500 uppercase font-semibold">
-                        <th className="py-1.5 px-1">University</th>
-                        <th className="py-1.5 px-1">Users</th>
-                        <th className="py-1.5 px-1">Premium</th>
-                        <th className="py-1.5 px-1">Avg Score</th>
+                      <tr className="text-slate-500 uppercase font-semibold text-[10px]">
+                        <th className="py-2 px-2">University</th>
+                        <th className="py-2 px-2">Users</th>
+                        <th className="py-2 px-2">Premium</th>
+                        <th className="py-2 px-2">Avg Score</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
+                    <tbody>
                       {overview.universityBreakdown.map((u, idx) => (
-                        <tr key={idx}>
-                          <td className="py-2 px-1 font-bold text-indigo-300">
+                        <tr
+                          key={idx}
+                          className={`${idx % 2 === 0 ? "" : "bg-slate-800/20"} hover:bg-slate-800/40 transition`}
+                        >
+                          <td className="py-2.5 px-2 font-bold text-indigo-300">
                             {u.university}
                           </td>
-                          <td className="py-2 px-1 font-semibold text-slate-200">
+                          <td className="py-2.5 px-2 font-semibold text-slate-200">
                             {u.users.toLocaleString()}
                           </td>
-                          <td className="py-2 px-1 text-amber-400 font-medium">
+                          <td className="py-2.5 px-2 text-amber-400 font-medium">
                             {u.premium_rate}%
                           </td>
-                          <td className="py-2 px-1 font-bold text-emerald-400">
+                          <td className="py-2.5 px-2 font-bold text-emerald-400">
                             {u.avg_score}%
                           </td>
                         </tr>
@@ -649,8 +689,8 @@ export default function AnalyticsView() {
             </div>
           </div>
 
-          {/* Course Attempt Telemetry */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl p-4 sm:p-6 space-y-4">
+          {/* ── Course Attempt Telemetry ── */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-indigo-400" />
               Course Attempt Telemetry (Grouped by Institution)
@@ -663,7 +703,7 @@ export default function AnalyticsView() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase font-semibold">
+                    <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase font-semibold text-[10px]">
                       <th className="py-3 px-4">University</th>
                       <th className="py-3 px-4">Course Code</th>
                       <th className="py-3 px-4">Total Attempts</th>
@@ -671,11 +711,11 @@ export default function AnalyticsView() {
                       <th className="py-3 px-4">Average Score %</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60">
+                  <tbody>
                     {data.courseStatsList.map((item, idx) => (
                       <tr
                         key={idx}
-                        className="hover:bg-slate-800/40 transition"
+                        className={`${idx % 2 === 0 ? "" : "bg-slate-800/20"} hover:bg-slate-800/40 transition`}
                       >
                         <td className="py-3.5 px-4 font-bold text-indigo-300">
                           {item.university}
