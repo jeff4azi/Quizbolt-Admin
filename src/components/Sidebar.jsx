@@ -28,8 +28,11 @@ export default function Sidebar({ adminRecord, onLogout, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
   const menuItems = [
+    // ── Core Operations ──────────────────────────────────────────────────
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "users", label: "Users & Overrides", icon: Users },
+    { id: "online", label: "Live Online Scholars", icon: Wifi },
+    // ── Content & Academic ───────────────────────────────────────────────
     {
       id: "universities",
       label: "Universities & Colleges",
@@ -37,18 +40,22 @@ export default function Sidebar({ adminRecord, onLogout, onClose }) {
     },
     { id: "courses", label: "Courses Management", icon: BookOpen },
     { id: "questions", label: "Question Bank", icon: HelpCircle },
+    // ── Monetization & Growth ────────────────────────────────────────────
     { id: "premium", label: "Monetization & Codes", icon: Crown },
-    { id: "reviews", label: "Testimonials Moderation", icon: MessageSquare },
-    { id: "reports", label: "Reports & Moderation", icon: Flag },
     { id: "referrals", label: "Referrals & Growth", icon: Share2 },
+    // ── Community & Safety ───────────────────────────────────────────────
     { id: "leaderboard", label: "Leaderboards", icon: Award },
-    { id: "analytics", label: "Analytics & Telemetry", icon: BarChart3 },
+    { id: "reports", label: "Reports & Moderation", icon: Flag },
+    { id: "reviews", label: "Testimonials Moderation", icon: MessageSquare },
+    // ── Communications ───────────────────────────────────────────────────
     { id: "notifications", label: "Push Notifications", icon: Bell },
     { id: "ads", label: "Ad Campaigns", icon: Megaphone },
+    // ── Analytics & Insight ──────────────────────────────────────────────
+    { id: "analytics", label: "Analytics & Telemetry", icon: BarChart3 },
+    // ── System & Admin ───────────────────────────────────────────────────
     { id: "cms", label: "Content & Legal CMS", icon: FileText },
     { id: "admins", label: "Admin Staff & Roles", icon: Shield },
     { id: "audit", label: "Audit Trail Log", icon: ShieldCheck },
-    { id: "online", label: "Live Online Scholars", icon: Wifi },
   ];
 
   const handleNav = (id) => {
