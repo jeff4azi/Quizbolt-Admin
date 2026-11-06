@@ -654,6 +654,7 @@ export default function OnlineView() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [drawerUser, setDrawerUser] = useState(null);
   const isMounted = useRef(true);
 
@@ -676,9 +677,13 @@ export default function OnlineView() {
       if (res.ok && isMounted.current) {
         const json = await res.json();
         setPresences(json.scholars || []);
+        setFetchError(false);
+      } else if (isMounted.current) {
+        setFetchError(true);
       }
     } catch (err) {
       console.error("Error fetching online scholars:", err);
+      if (isMounted.current) setFetchError(true);
     } finally {
       if (isMounted.current) {
         setInitialLoad(false);
@@ -798,6 +803,12 @@ export default function OnlineView() {
         {refreshing && (
           <span className="text-[11px] text-slate-500 flex items-center gap-1">
             <RefreshCw className="w-3 h-3 animate-spin" /> Updating...
+          </span>
+        )}
+        {fetchError && !refreshing && (
+          <span className="text-[11px] text-rose-400 font-semibold flex items-center gap-1 px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+            Last refresh failed — retrying automatically
           </span>
         )}
       </div>
