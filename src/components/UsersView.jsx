@@ -415,7 +415,7 @@ export default function UsersView() {
       const token = session?.session?.access_token;
 
       const res = await fetch(
-        `${API_BASE_URL}/api/admin/premium/grant-free-days`,
+        `${API_BASE_URL}/api/admin/premium-grants/grant-days`,
         {
           method: "POST",
           headers: {
@@ -423,7 +423,7 @@ export default function UsersView() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            userId: drawerUser.id,
+            user_id: drawerUser.id,
             days,
             reason: reasonText,
           }),
@@ -431,7 +431,10 @@ export default function UsersView() {
       );
 
       const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || "Failed to grant premium");
+      if (!res.ok)
+        throw new Error(
+          resData.message || resData.error || "Failed to grant premium"
+        );
 
       // Update states
       setDrawerUser((prev) => ({ ...prev, is_premium: true }));
