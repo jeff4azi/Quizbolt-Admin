@@ -114,8 +114,12 @@ export default function DashboardView({ onNavigate }) {
       const token = session?.session?.access_token;
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
+      // Sunday 00:00 local — same week boundary the client/leaderboard uses.
+      const weekStart = new Date(todayStart);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       const params = new URLSearchParams({
         today_start: todayStart.toISOString(),
+        week_start: weekStart.toISOString(),
       });
       const res = await fetch(
         `${API_BASE_URL}/api/admin/dashboard?${params.toString()}`,
@@ -209,7 +213,7 @@ export default function DashboardView({ onNavigate }) {
   });
 
   /* Activity breakdown max for bar scaling */
-  const examAtt = kpis.totalExamAttempts || 0;
+  const examAtt = kpis.examAttemptsThisWeek || 0;
   const practiceAtt = kpis.totalTestAttempts || 0;
   const matchAtt = kpis.totalMatchAttempts || 0;
   const activityMax = Math.max(examAtt, practiceAtt, matchAtt, 1);
