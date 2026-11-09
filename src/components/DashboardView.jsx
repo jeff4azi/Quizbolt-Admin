@@ -112,9 +112,17 @@ export default function DashboardView({ onNavigate }) {
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
-      const res = await fetch(`${API_BASE_URL}/api/admin/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const params = new URLSearchParams({
+        today_start: todayStart.toISOString(),
       });
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/dashboard?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       if (res.ok) setStats(await res.json());
 
       try {
@@ -263,7 +271,7 @@ export default function DashboardView({ onNavigate }) {
       {/* ── 3. Alert Pills Row ── */}
       {(kpis.pendingReviews > 0 ||
         kpis.availableCodes < 5 ||
-        kpis.newSignups24h > 0) && (
+        kpis.newSignupsToday > 0) && (
         <div className="flex flex-wrap gap-2">
           {kpis.pendingReviews > 0 && (
             <button
@@ -284,12 +292,12 @@ export default function DashboardView({ onNavigate }) {
               Only {kpis.availableCodes ?? 0} codes left
             </button>
           )}
-          {kpis.newSignups24h > 0 && (
+          {kpis.newSignupsToday > 0 && (
             <button
               onClick={() => go("users")}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full text-xs font-bold hover:bg-emerald-500/20 transition"
             >
-              <UserCheck className="w-3 h-3" />+{kpis.newSignups24h} new today
+              <UserCheck className="w-3 h-3" />+{kpis.newSignupsToday} new today
             </button>
           )}
         </div>
