@@ -60,6 +60,21 @@ const LEVEL_LABELS = {
 };
 const formatLevel = (year) => LEVEL_LABELS[Number(year)] || `Year ${year}`;
 
+// Preset grant reasons. Kept short and word-only (no slashes) — the chosen
+// text is what gets stored in premium_access.reason.
+const GRANT_REASON_PRESETS = [
+  "Content Contribution",
+  "Event Promo",
+  "Security Report",
+  "Early Supporter",
+];
+
+// A premium_access row is a system code redemption when granted_by carries the
+// "<tier>_code_system" marker written by redeem_premium_code(). Anything else
+// (an admin email) is a manual gift.
+const isCodeRedemption = (grantedBy) =>
+  typeof grantedBy === "string" && grantedBy.endsWith("_code_system");
+
 export default function UsersView() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -132,7 +147,7 @@ export default function UsersView() {
   const [overrideActionLoading, setOverrideActionLoading] = useState(false);
 
   // Grant Temporary Premium (inside Drawer)
-  const [grantPreset, setGrantPreset] = useState("contribution");
+  const [grantPreset, setGrantPreset] = useState(GRANT_REASON_PRESETS[0]);
   const [grantReasonText, setGrantReasonText] = useState("");
   const [grantDays, setGrantDays] = useState(7);
   const [grantLoading, setGrantLoading] = useState(false);
@@ -406,10 +421,8 @@ export default function UsersView() {
     if (!drawerUser) return;
     setGrantLoading(true);
 
-    const isPreset = grantPreset === "contribution";
-    const reasonText = isPreset
-      ? "Content Contribution / Verified Volunteer"
-      : grantReasonText.trim();
+    const isPreset = GRANT_REASON_PRESETS.includes(grantPreset);
+    const reasonText = isPreset ? grantPreset : grantReasonText.trim();
     const days = parseInt(grantDays, 10);
 
     try {
@@ -509,15 +522,19 @@ export default function UsersView() {
         prev.map((u) => (u.id === drawerUser.id ? { ...u, is_premium: false } : u))
       );
 
+      const wasCode = isCodeRedemption(drawerDetails?.premium_grant?.granted_by);
+      const who = drawerUser.full_name || drawerUser.user_name;
       setNotification({
         type: "success",
-        text: `Premium gift cancelled for ${drawerUser.full_name || drawerUser.user_name}. The record was kept.`,
+        text: `${
+          wasCode ? "Code redemption revoked" : "Premium gift cancelled"
+        } for ${who}. The record was kept.`,
       });
       setTimeout(() => setNotification(null), 5000);
     } catch (err) {
       setNotification({
         type: "error",
-        text: `Error cancelling gift: ${err.message}`,
+        text: `Error revoking premium: ${err.message}`,
       });
       setTimeout(() => setNotification(null), 5000);
     } finally {
@@ -1971,6 +1988,13 @@ export default function UsersView() {
                             ? new Date(g.expires_at).getTime() <= Date.now()
                             : false;
                           const isCancelled = !g.active && Boolean(g.cancelled_at);
+                          const isCode = isCodeRedemption(g.granted_by);
+                          const cardTitle = isCode
+                            ? "Code Redemption Record"
+                            : "Premium Gift Record";
+                          const actionLabel = isCode
+                            ? "Revoke Redemption"
+                            : "Cancel Gift";
                           const statusLabel = g.active
                             ? "Active"
                             : isCancelled
@@ -1987,7 +2011,7 @@ export default function UsersView() {
                               <div className="flex items-center justify-between gap-2">
                                 <div className="font-bold text-white flex items-center gap-1.5">
                                   <Gift className="w-4 h-4 text-amber-400" />
-                                  Premium Gift Record
+                                  {cardTitle}
                                 </div>
                                 <span
                                   className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${statusClasses}`}
@@ -2042,10 +2066,16 @@ export default function UsersView() {
 
                               <p className="text-[11px] leading-relaxed text-slate-400">
                                 {g.active
-                                  ? "This gift is active — the student currently has premium from it."
+                                  ? isCode
+                                    ? "This code redemption is active — the student currently has premium from it."
+                                    : "This gift is active — the student currently has premium from it."
                                   : isCancelled
-                                    ? "This gift was cancelled by an admin: the student's premium is off, the record is kept, and its original expiry date is unchanged."
-                                    : "This gift lapsed on its own expiry date (not cancelled)."}
+                                    ? isCode
+                                      ? "This redemption was revoked by an admin: the student's premium is off, the record is kept, and its original expiry date is unchanged."
+                                      : "This gift was cancelled by an admin: the student's premium is off, the record is kept, and its original expiry date is unchanged."
+                                    : isCode
+                                      ? "This redemption lapsed on its own expiry date (not revoked)."
+                                      : "This gift lapsed on its own expiry date (not cancelled)."}
                               </p>
 
                               {g.active && (
@@ -2060,7 +2090,7 @@ export default function UsersView() {
                                   ) : (
                                     <XCircle className="w-3.5 h-3.5" />
                                   )}
-                                  <span>Cancel Gift</span>
+                                  <span>{actionLabel}</span>
                                 </button>
                               )}
                             </div>
@@ -2109,7 +2139,11 @@ export default function UsersView() {
                           onChange={(e) => setGrantPreset(e.target.value)}
                           className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none"
                         >
-                          <option value="contribution">Content Contribution / Volunteer</option>
+                          {GRANT_REASON_PRESETS.map((preset) => (
+                            <option key={preset} value={preset}>
+                              {preset}
+                            </option>
+                          ))}
                           <option value="other">Custom Administrative Reason</option>
                         </select>
                       </div>
