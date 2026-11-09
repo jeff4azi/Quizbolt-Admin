@@ -8,6 +8,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   X,
   AlertTriangle,
   ShieldAlert,
@@ -664,7 +665,8 @@ export default function PremiumView() {
               })()}
             </div>
 
-            {/* University Breakdown Tables — 3 tiers */}
+            {/* University Breakdown Tables — 3 tiers (click a university to
+                expand its level/year breakdown; collapsed by default) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-slate-700/40 text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -675,21 +677,11 @@ export default function PremiumView() {
                     No redemptions found
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-700/30">
-                    {stats.full.byUniversity.map((row) => (
-                      <div
-                        key={row.university}
-                        className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition"
-                      >
-                        <span className="text-slate-200 font-semibold">
-                          {row.university}
-                        </span>
-                        <span className="font-black text-amber-400">
-                          {row.count} used
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  <UniversityBreakdown
+                    rows={stats.full.byUniversity}
+                    accentClass="text-amber-400"
+                    barClass="bg-amber-500"
+                  />
                 )}
               </div>
 
@@ -703,21 +695,11 @@ export default function PremiumView() {
                     No redemptions found
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-700/30">
-                    {stats.temp.byUniversity.map((row) => (
-                      <div
-                        key={row.university}
-                        className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition"
-                      >
-                        <span className="text-slate-200 font-semibold">
-                          {row.university}
-                        </span>
-                        <span className="font-black text-cyan-400">
-                          {row.count} used
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  <UniversityBreakdown
+                    rows={stats.temp.byUniversity}
+                    accentClass="text-cyan-400"
+                    barClass="bg-cyan-500"
+                  />
                 )}
               </div>
 
@@ -731,21 +713,11 @@ export default function PremiumView() {
                     No redemptions found
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-700/30">
-                    {stats.budget3d.byUniversity.map((row) => (
-                      <div
-                        key={row.university}
-                        className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-700/20 transition"
-                      >
-                        <span className="text-slate-200 font-semibold">
-                          {row.university}
-                        </span>
-                        <span className="font-black text-emerald-500">
-                          {row.count} used
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  <UniversityBreakdown
+                    rows={stats.budget3d.byUniversity}
+                    accentClass="text-emerald-500"
+                    barClass="bg-emerald-500"
+                  />
                 )}
               </div>
             </div>
@@ -1800,6 +1772,90 @@ export default function PremiumView() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── UniversityBreakdown ─────────────────────────────────────────────────────
+// Collapsed-by-default list of universities for a code tier. Clicking a row
+// expands the level/year breakdown of the users from that university who
+// redeemed the code.
+const UNI_LEVEL_LABELS = {
+  1: "100 Level",
+  2: "200 Level",
+  3: "300 Level",
+  4: "400 Level",
+};
+const uniLevelLabel = (year) =>
+  UNI_LEVEL_LABELS[Number(year)] ||
+  (Number(year) > 0 ? `Year ${year}` : "Unknown");
+
+function UniversityBreakdown({
+  rows,
+  accentClass = "text-amber-400",
+  barClass = "bg-amber-500",
+}) {
+  const [openUni, setOpenUni] = useState(null);
+
+  return (
+    <div className="divide-y divide-slate-700/30">
+      {rows.map((row) => {
+        const open = openUni === row.university;
+        const levels = row.byLevel || [];
+        const maxCount = Math.max(1, ...levels.map((l) => l.count));
+        return (
+          <div key={row.university}>
+            <button
+              type="button"
+              onClick={() => setOpenUni(open ? null : row.university)}
+              className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-xs hover:bg-slate-700/20 transition text-left"
+            >
+              <span className="flex items-center gap-1.5 min-w-0">
+                <ChevronDown
+                  className={`w-3.5 h-3.5 shrink-0 text-slate-500 transition-transform ${
+                    open ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-slate-200 font-semibold truncate">
+                  {row.university}
+                </span>
+              </span>
+              <span className={`font-black shrink-0 ${accentClass}`}>
+                {row.count} used
+              </span>
+            </button>
+
+            {open && (
+              <div className="px-4 pb-3 pt-0.5 pl-9 space-y-1.5 bg-slate-900/40">
+                {levels.length === 0 ? (
+                  <div className="text-[10px] text-slate-500 py-1">
+                    No level data available
+                  </div>
+                ) : (
+                  levels.map((l) => (
+                    <div key={l.year} className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 font-semibold w-16 shrink-0">
+                        {uniLevelLabel(l.year)}
+                      </span>
+                      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${barClass}`}
+                          style={{
+                            width: `${Math.round((l.count / maxCount) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-black text-slate-200 w-5 text-right shrink-0">
+                        {l.count}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
