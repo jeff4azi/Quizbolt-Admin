@@ -122,15 +122,30 @@ export default function DashboardView({ onNavigate }) {
         if (rpcStats) {
           setMessagingStats(rpcStats);
         } else {
+          // Fallback direct count queries (excluding the QuizBolt official channel)
+          const { data: systemProfiles } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("is_system", true);
+          const systemIds = (systemProfiles || []).map((p) => p.id);
+
+          let connQuery = supabase
+            .from("connections")
+            .select("*", { count: "exact", head: true })
+            .eq("state", "accepted");
+          if (systemIds.length) {
+            const systemList = `(${systemIds.join(",")})`;
+            connQuery = connQuery
+              .not("requester_id", "in", systemList)
+              .not("receiver_id", "in", systemList);
+          }
+
           const [
             { count: connCount },
             { count: msgCount },
             { count: repCount },
           ] = await Promise.all([
-            supabase
-              .from("connections")
-              .select("*", { count: "exact", head: true })
-              .eq("state", "accepted"),
+            connQuery,
             supabase
               .from("messages")
               .select("*", { count: "exact", head: true })

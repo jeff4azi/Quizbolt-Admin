@@ -61,14 +61,31 @@ export default function ReportsView() {
       if (!error && data) {
         setStats(data);
       } else {
-        // Fallback direct count queries
+        // Fallback direct count queries (excluding the QuizBolt official channel)
+        const { data: systemProfiles } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("is_system", true);
+        const systemIds = (systemProfiles || []).map((p) => p.id);
+
+        let connQuery = supabase
+          .from("connections")
+          .select("*", { count: "exact", head: true })
+          .eq("state", "accepted");
+        if (systemIds.length) {
+          const systemList = `(${systemIds.join(",")})`;
+          connQuery = connQuery
+            .not("requester_id", "in", systemList)
+            .not("receiver_id", "in", systemList);
+        }
+
         const [
           { count: connCount },
           { count: msgCount },
           { count: pendingCount },
           { count: weekReportsCount },
         ] = await Promise.all([
-          supabase.from("connections").select("*", { count: "exact", head: true }).eq("state", "accepted"),
+          connQuery,
           supabase.from("messages").select("*", { count: "exact", head: true }).gte("created_at", new Date(new Date().setHours(0,0,0,0)).toISOString()),
           supabase.from("reports").select("*", { count: "exact", head: true }).eq("status", "pending"),
           supabase.from("reports").select("*", { count: "exact", head: true }).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
