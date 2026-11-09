@@ -21,6 +21,7 @@ import {
   BookOpen,
   Gift,
   RotateCcw,
+  XCircle,
   Plus,
   Eye,
   Clock,
@@ -135,6 +136,7 @@ export default function UsersView() {
   const [grantReasonText, setGrantReasonText] = useState("");
   const [grantDays, setGrantDays] = useState(7);
   const [grantLoading, setGrantLoading] = useState(false);
+  const [cancelGrantLoading, setCancelGrantLoading] = useState(false);
 
   // Delete User Dialog
   const [deleteUserDialog, setDeleteUserDialog] = useState(null);
@@ -461,6 +463,65 @@ export default function UsersView() {
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setGrantLoading(false);
+    }
+  };
+
+  // Cancel an active premium gift (deactivate, keep the record for reference)
+  const handleCancelGift = async () => {
+    const grantId = drawerDetails?.premium_grant?.id;
+    if (!drawerUser || !grantId) return;
+    setCancelGrantLoading(true);
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/premium-grants/${grantId}/cancel`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const resData = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(
+          resData.message || resData.error || "Failed to cancel gift"
+        );
+
+      // Reflect the deactivated grant without dropping the record
+      setDrawerDetails((prev) =>
+        prev
+          ? {
+              ...prev,
+              profile: { ...prev.profile, is_premium: false },
+              premium_grant: {
+                ...prev.premium_grant,
+                active: false,
+                cancelled_at: new Date().toISOString(),
+              },
+            }
+          : prev
+      );
+      setDrawerUser((prev) => ({ ...prev, is_premium: false }));
+      setUsers((prev) =>
+        prev.map((u) => (u.id === drawerUser.id ? { ...u, is_premium: false } : u))
+      );
+
+      setNotification({
+        type: "success",
+        text: `Premium gift cancelled for ${drawerUser.full_name || drawerUser.user_name}. The record was kept.`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch (err) {
+      setNotification({
+        type: "error",
+        text: `Error cancelling gift: ${err.message}`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setCancelGrantLoading(false);
     }
   };
 
@@ -1903,6 +1964,108 @@ export default function UsersView() {
                   {/* ─── TAB 5: GRANT PREMIUM ───────────────────────────── */}
                   {drawerTab === "grant" && (
                     <form onSubmit={handleGrantPremium} className="space-y-4 text-xs animate-in fade-in duration-150">
+                      {drawerDetails?.premium_grant &&
+                        (() => {
+                          const g = drawerDetails.premium_grant;
+                          const isExpired = g.expires_at
+                            ? new Date(g.expires_at).getTime() <= Date.now()
+                            : false;
+                          const isCancelled = !g.active && Boolean(g.cancelled_at);
+                          const statusLabel = g.active
+                            ? "Active"
+                            : isCancelled
+                              ? "Cancelled"
+                              : "Expired";
+                          const statusClasses = g.active
+                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                            : isCancelled
+                              ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                              : "bg-slate-700/40 text-slate-300 border-slate-600/40";
+
+                          return (
+                            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="font-bold text-white flex items-center gap-1.5">
+                                  <Gift className="w-4 h-4 text-amber-400" />
+                                  Premium Gift Record
+                                </div>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${statusClasses}`}
+                                >
+                                  {statusLabel}
+                                </span>
+                              </div>
+
+                              <div className="space-y-1 text-slate-300">
+                                <div className="flex justify-between gap-3">
+                                  <span className="text-slate-500">Reason</span>
+                                  <span className="font-semibold text-right">
+                                    {g.reason || "—"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between gap-3">
+                                  <span className="text-slate-500">Granted by</span>
+                                  <span className="font-semibold text-right">
+                                    {g.granted_by || "—"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between gap-3">
+                                  <span className="text-slate-500">Expires</span>
+                                  <span className="font-semibold text-right">
+                                    {g.expires_at
+                                      ? new Date(g.expires_at).toLocaleString()
+                                      : "—"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between gap-3">
+                                  <span className="text-slate-500">Expiry state</span>
+                                  <span
+                                    className={`font-semibold text-right ${
+                                      isExpired ? "text-rose-300" : "text-emerald-300"
+                                    }`}
+                                  >
+                                    {isExpired ? "Expired" : "Not expired"}
+                                  </span>
+                                </div>
+                                {isCancelled && (
+                                  <div className="flex justify-between gap-3">
+                                    <span className="text-slate-500">Cancelled</span>
+                                    <span className="font-semibold text-right text-rose-300">
+                                      {g.cancelled_at
+                                        ? new Date(g.cancelled_at).toLocaleString()
+                                        : "—"}
+                                      {g.cancelled_by ? ` • ${g.cancelled_by}` : ""}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <p className="text-[11px] leading-relaxed text-slate-400">
+                                {g.active
+                                  ? "This gift is active — the student currently has premium from it."
+                                  : isCancelled
+                                    ? "This gift was cancelled by an admin: the student's premium is off, the record is kept, and its original expiry date is unchanged."
+                                    : "This gift lapsed on its own expiry date (not cancelled)."}
+                              </p>
+
+                              {g.active && (
+                                <button
+                                  type="button"
+                                  onClick={handleCancelGift}
+                                  disabled={cancelGrantLoading}
+                                  className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                >
+                                  {cancelGrantLoading ? (
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Cancel Gift</span>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-300 space-y-1">
                         <div className="font-bold flex items-center gap-1.5">
                           <Gift className="w-4 h-4 text-emerald-400" />
