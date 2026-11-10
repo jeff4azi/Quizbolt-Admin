@@ -379,7 +379,16 @@ export default function UsersView() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(editForm),
+          body: JSON.stringify({
+            ...editForm,
+            // profiles.university / college store the uppercase codes (e.g. UNILAG / COSAN)
+            university: editForm.university
+              ? editForm.university.trim().toUpperCase()
+              : editForm.university,
+            college: editForm.college
+              ? editForm.college.trim().toUpperCase()
+              : editForm.college,
+          }),
         }
       );
 
